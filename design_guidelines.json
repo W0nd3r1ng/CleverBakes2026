@@ -1,0 +1,105 @@
+{
+  "theme": "light",
+  "archetype": "1_organic_earthy",
+  "typography": {
+    "headings": {
+      "family": "Playfair Display",
+      "weights": ["400", "600", "700"],
+      "usage_rules": "Use tracking-tight for all headings over 32px. Never use bold if the size is 5xl+, use 600 weight instead to maintain elegance."
+    },
+    "body": {
+      "family": "Manrope",
+      "weights": ["400", "500", "600"],
+      "usage_rules": "Use tracking-normal and leading-relaxed for optimal readability."
+    },
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tight text-[#3E2723]",
+      "h2": "text-3xl sm:text-4xl tracking-tight text-[#3E2723]",
+      "h3": "text-xl sm:text-2xl text-[#3E2723]",
+      "body": "text-base text-[#5D4037]",
+      "small": "text-sm text-[#8D6E63] uppercase tracking-[0.1em]"
+    }
+  },
+  "colors": {
+    "background": "#FDFBF7",
+    "surface": "#FFFFFF",
+    "surface_secondary": "#F4EFE6",
+    "primary": "#D35400",
+    "primary_hover": "#B34100",
+    "text_main": "#3E2723",
+    "text_muted": "#8D6E63",
+    "border": "#EBE3D5",
+    "accent_ube": "#8E6B9B",
+    "success": "#2E7D32",
+    "warning": "#F57C00",
+    "danger": "#C62828"
+  },
+  "spacing_and_layout": {
+    "philosophy": "Generous Spacing Philosophy with p-8 to p-12 standard paddings for main marketing sections. This provides an airy, elevated look.",
+    "grid_system": "Use grid-cols-1 md:grid-cols-12 with gap-8 for product displays and marketing sections.",
+    "admin_dashboard": "Use Control Room grid: grid-cols-1 md:grid-cols-4, gap-6. Dense layout utilizing full height.",
+    "cards": "Subtle borders (border-[#EBE3D5]), rounded-xl, flat background, ambient soft shadow on hover with -translate-y-1 transition.",
+    "mobile_rules": "Images max-h-[60vh] on mobile. Stack grid to single column."
+  },
+  "components_strategy": {
+    "marketing_pages": "Use pure HTML/Tailwind for layouts. Custom sections for Hero, About, Categories. Do not rely heavily on generic Shadcn card wrappers.",
+    "interactive_elements": "Use heavily customized Shadcn components (Buttons, Dialogs, Select, Forms). Override default border radius to rounded-lg or rounded-xl.",
+    "forms": "Use Shadcn Form, Input, Label. Soft borders and #FDFBF7 background for inputs.",
+    "navigation": "Sticky nav with bg-[#FDFBF7]/80 and backdrop-blur-md. Clean links, primary CTA 'Order Now'.",
+    "dashboard": "Shadcn Sidebar, Table, Tabs. Solid backgrounds (no glassmorphism) to keep it highly accessible and clean."
+  },
+  "motion_interactions": {
+    "hover_states": "Buttons must have distinct hover states (lighter/darker). Cards lift slightly (-translate-y-1) and cast a shadow-lg.",
+    "transitions": "Use 'transition-all duration-300 ease-in-out' for cards, images, and buttons.",
+    "page_load": "Subtle fade-in and slight slide-up for main content sections."
+  },
+  "icons_and_assets": {
+    "library": "lucide-react",
+    "style": "Use stroke-width 1.5 to 2 depending on scale, matching the elegant feel of the typography."
+  },
+  "media": {
+    "hero_background": {
+      "url": "https://images.pexels.com/photos/33327470/pexels-photo-33327470.png",
+      "description": "Busy bakery scene with customers selecting fresh pastries under warm lighting",
+      "usage": "Main hero background. CRITICAL: Use a bg-[#FDFBF7]/60 or gradient overlay to ensure text readability."
+    },
+    "product_ube_cake": {
+      "url": "https://images.pexels.com/photos/5638598/pexels-photo-5638598.png",
+      "description": "A vibrant purple yam cake elegantly presented on a decorative plate.",
+      "usage": "Featured product image in the menu."
+    },
+    "product_cinnamon_rolls": {
+      "url": "https://images.pexels.com/photos/5662362/pexels-photo-5662362.jpeg",
+      "description": "Delicious homemade cinnamon rolls placed on parchment paper",
+      "usage": "Featured product image in the menu."
+    },
+    "product_banana_muffins": {
+      "url": "https://images.unsplash.com/photo-1610881332737-3e187bfae1d0",
+      "description": "Banana muffins/brown bread on white textile",
+      "usage": "Featured product image in the menu."
+    },
+    "about_bread_loaf": {
+      "url": "https://images.pexels.com/photos/30350360/pexels-photo-30350360.jpeg",
+      "description": "Crispy golden-brown artisan bread loaves fresh from the oven",
+      "usage": "About us section or craftsmanship highlight."
+    }
+  },
+  "accessibility_and_testing": {
+    "contrast": "Ensure all text against the #FDFBF7 background has sufficient contrast. Use #3E2723 for primary text.",
+    "testing_attributes": "All interactive elements MUST include data-testid. Examples: data-testid='order-now-button', data-testid='gcash-upload-input', data-testid='track-order-button'."
+  },
+  "feature_implementation_notes": {
+    "order_tracking": "Implement a simple form on the frontend where users enter order number, and display a vertical timeline component showing statuses (e.g., Pending, Baking, Ready for Pickup/Delivery, Completed).",
+    "gcash_payment": "Provide a clean file upload area for GCash QR receipt if the user selects GCash in the payment radio group.",
+    "fb_messenger": "Add a floating widget or a prominent button in the footer linking to the FB Messenger URL.",
+    "admin_dashboard": "Needs protected routes. Admin should have tables with status dropdowns (using Shadcn Select) to quickly change order statuses."
+  },
+  "instructions_to_main_agent": [
+    "Install necessary fonts via Google Fonts in index.css (Playfair Display, Manrope).",
+    "Install lucide-react if not present, though it is usually default.",
+    "Initialize Shadcn UI and add components: button, card, input, form, select, table, tabs, dialog, radio-group.",
+    "Configure Tailwind with the custom colors provided in this JSON.",
+    "Strictly follow the 'Organic & Earthy' theme. Avoid sharp neons, deep blacks, or cold grays.",
+    "Ensure all data-testids are added to interactive elements."
+  ]
+}
