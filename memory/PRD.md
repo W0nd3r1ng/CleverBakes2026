@@ -43,8 +43,9 @@ User had an existing bakery ordering site (Vite + React + Netlify functions + Ne
 - All 15 original bakery products seeded
 - Sample reviews seeded
 - Image upload endpoint (base64)
+- **Product Categories** (March 31, 2026): 4 seeded categories (Cakes, Cookies, Breads & Pastries, Brownies), admin CRUD for categories, category filter tabs on menu, category dropdown in product modal, category badges on product cards
 
-## Testing: 100% pass rate (21/21 backend, all frontend tests)
+## Testing: 100% pass rate (27/27 backend, all frontend tests)
 
 ## Deployment Recommendations
 **Free and easy options:**
