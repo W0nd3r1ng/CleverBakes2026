@@ -44,8 +44,9 @@ User had an existing bakery ordering site (Vite + React + Netlify functions + Ne
 - Sample reviews seeded
 - Image upload endpoint (base64)
 - **Product Categories** (March 31, 2026): 4 seeded categories (Cakes, Cookies, Breads & Pastries, Brownies), admin CRUD for categories, category filter tabs on menu, category dropdown in product modal, category badges on product cards
+- **Best Sellers** (March 31, 2026): Admin can toggle any product as best seller via flame icon in products table. Menu shows prominent Best Sellers row at top + filter tab. 5 products seeded as bestsellers. API: PUT /api/products/{id}/bestseller
 
-## Testing: 100% pass rate (27/27 backend, all frontend tests)
+## Testing: 100% pass rate (31/31 backend, all frontend tests)
 
 ## Deployment Recommendations
 **Free and easy options:**
