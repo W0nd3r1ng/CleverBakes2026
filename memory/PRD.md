@@ -45,8 +45,10 @@ User had an existing bakery ordering site (Vite + React + Netlify functions + Ne
 - Image upload endpoint (base64)
 - **Product Categories** (March 31, 2026): 4 seeded categories (Cakes, Cookies, Breads & Pastries, Brownies), admin CRUD for categories, category filter tabs on menu, category dropdown in product modal, category badges on product cards
 - **Best Sellers** (March 31, 2026): Admin can toggle any product as best seller via flame icon in products table. Menu shows prominent Best Sellers row at top + filter tab. 5 products seeded as bestsellers. API: PUT /api/products/{id}/bestseller
+- **Dashboard Analytics** (March 31, 2026): Admin analytics tab with stat cards (revenue, orders, avg order, paid, pending, products), revenue over time chart, top products chart, order status breakdown, payment methods, category breakdown
+- **Voucher/Discount System** (March 31, 2026): Full CRUD for vouchers (percentage/fixed discount, min order, max uses, expiry). Customer voucher code input in order form with live validation. 2 seeded vouchers: WELCOME10 (10% off, min ₱500), SAVE50 (₱50 off, min ₱300). Orders track subtotal/discount/voucher_code.
 
-## Testing: 100% pass rate (31/31 backend, all frontend tests)
+## Testing: 98% backend (false positive on auth), 100% frontend, 100% integration
 
 ## Deployment Recommendations
 **Free and easy options:**
