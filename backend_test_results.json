@@ -1,0 +1,155 @@
+{
+  "timestamp": "2026-03-31T00:15:09.342507",
+  "total_tests": 21,
+  "passed_tests": 21,
+  "success_rate": 100.0,
+  "results": [
+    {
+      "test": "Admin Login",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Token received: eyJhbGciOiJIUzI1NiIs...",
+      "response_data": null
+    },
+    {
+      "test": "Auth Me",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Response: {'success': True, 'user': {'username': 'admin', 'role': 'admin'}}",
+      "response_data": null
+    },
+    {
+      "test": "Invalid Login",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Correctly rejected invalid credentials",
+      "response_data": null
+    },
+    {
+      "test": "Get Products",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Retrieved 15 products",
+      "response_data": null
+    },
+    {
+      "test": "Product Structure",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "All required fields present",
+      "response_data": null
+    },
+    {
+      "test": "Create Product",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Created product ID: 14784293-bb22-4e06-bb32-f48d25ed260f",
+      "response_data": null
+    },
+    {
+      "test": "Get Single Product",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Retrieved product: Test Cupcake",
+      "response_data": null
+    },
+    {
+      "test": "Update Product",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Updated product",
+      "response_data": null
+    },
+    {
+      "test": "Create Order",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Created order #323083 (ID: 30269b31-c723-4d03-9fb0-a8d9d4fbdbeb)",
+      "response_data": null
+    },
+    {
+      "test": "Track Order",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Tracked order #323083",
+      "response_data": null
+    },
+    {
+      "test": "Get All Orders",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Retrieved 1 orders",
+      "response_data": null
+    },
+    {
+      "test": "Update Order Status",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Updated order status to Confirmed",
+      "response_data": null
+    },
+    {
+      "test": "Update Payment Status",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Updated payment status to Paid",
+      "response_data": null
+    },
+    {
+      "test": "Create Review",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Created review ID: 1a9e22db-72bd-4cbf-9fd8-e0d0c2713c4c",
+      "response_data": null
+    },
+    {
+      "test": "Get All Reviews",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Retrieved 4 reviews",
+      "response_data": null
+    },
+    {
+      "test": "Get Approved Reviews",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Retrieved 3 approved reviews",
+      "response_data": null
+    },
+    {
+      "test": "Toggle Review Approval",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Approved review",
+      "response_data": null
+    },
+    {
+      "test": "Upload Endpoint",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Upload endpoint exists (returns expected error for missing file)",
+      "response_data": null
+    },
+    {
+      "test": "Cleanup Product",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Deleted test product",
+      "response_data": null
+    },
+    {
+      "test": "Cleanup Order",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Deleted test order",
+      "response_data": null
+    },
+    {
+      "test": "Cleanup Review",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Deleted test review",
+      "response_data": null
+    }
+  ]
+}
