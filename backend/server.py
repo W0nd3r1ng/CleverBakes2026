@@ -104,6 +104,7 @@ class ProductCreate(BaseModel):
     variations: Optional[List[str]] = []
     sizes: Optional[List[str]] = []
     category_id: Optional[str] = ""
+    is_bestseller: Optional[bool] = False
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
@@ -113,6 +114,7 @@ class ProductUpdate(BaseModel):
     variations: Optional[List[str]] = None
     sizes: Optional[List[str]] = None
     category_id: Optional[str] = None
+    is_bestseller: Optional[bool] = None
 
 class OrderCreate(BaseModel):
     product_name: str
@@ -237,6 +239,7 @@ async def create_product(data: ProductCreate, request: Request):
         "variations": data.variations or [],
         "sizes": data.sizes or [],
         "category_id": data.category_id or "",
+        "is_bestseller": data.is_bestseller or False,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -248,7 +251,7 @@ async def create_product(data: ProductCreate, request: Request):
 async def update_product(product_id: str, data: ProductUpdate, request: Request):
     await get_current_admin(request)
     update = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    for field in ["name", "description", "price", "image", "variations", "sizes", "category_id"]:
+    for field in ["name", "description", "price", "image", "variations", "sizes", "category_id", "is_bestseller"]:
         val = getattr(data, field)
         if val is not None:
             update[field] = val
@@ -265,6 +268,17 @@ async def delete_product(product_id: str, request: Request):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Product not found")
     return {"success": True, "message": "Product deleted"}
+
+@api_router.put("/products/{product_id}/bestseller")
+async def toggle_bestseller(product_id: str, request: Request):
+    await get_current_admin(request)
+    product = await db.products.find_one({"id": product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    new_val = not product.get("is_bestseller", False)
+    await db.products.update_one({"id": product_id}, {"$set": {"is_bestseller": new_val, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    product = await db.products.find_one({"id": product_id}, {"_id": 0})
+    return {"success": True, "data": product}
 
 # ─── Orders ───
 
@@ -422,6 +436,8 @@ SEED_PRODUCT_CATEGORIES = {
     "Ube Cheesecake": "Cakes",
 }
 
+SEED_BESTSELLERS = {"Ube Cheesecake", "Customize Cake", "Cinnamon Rolls", "Double Chocolate Brownies", "Custom Bento Cake"}
+
 SEED_PRODUCTS = [
     {"name": "Banana Muffins", "image": "/images/banana muffins.jpg", "description": "Moist and fluffy muffins with fresh bananas", "price": 250, "variations": [], "sizes": []},
     {"name": "Banana Bread", "image": "/images/banna bread.jpg", "description": "Classic homemade banana bread, perfectly sweet", "price": 350, "variations": [], "sizes": []},
@@ -479,6 +495,7 @@ async def seed_data():
                 "variations": p["variations"],
                 "sizes": p["sizes"],
                 "category_id": category_map.get(cat_name, ""),
+                "is_bestseller": p["name"] in SEED_BESTSELLERS,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }

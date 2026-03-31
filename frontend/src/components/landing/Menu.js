@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Flame } from 'lucide-react';
 import { getCategories } from '../../api';
 
 export default function Menu({ products, loading, onOrder }) {
@@ -11,10 +11,13 @@ export default function Menu({ products, loading, onOrder }) {
     getCategories().then(res => setCategories(res.data || [])).catch(() => {});
   }, []);
 
+  const bestsellers = useMemo(() => products.filter(p => p.is_bestseller), [products]);
+
   const filteredProducts = useMemo(() => {
     if (activeCategory === 'all') return products;
+    if (activeCategory === 'bestsellers') return bestsellers;
     return products.filter(p => p.category_id === activeCategory);
-  }, [products, activeCategory]);
+  }, [products, activeCategory, bestsellers]);
 
   if (loading) {
     return (
@@ -35,36 +38,91 @@ export default function Menu({ products, loading, onOrder }) {
             <h2 className="font-heading text-3xl sm:text-4xl font-semibold text-bark tracking-tight">Our Menu</h2>
           </div>
 
+          {/* Best Sellers Highlight (only when on "All" view) */}
+          {activeCategory === 'all' && bestsellers.length > 0 && (
+            <div className="mb-14" data-testid="bestsellers-section">
+              <div className="flex items-center gap-2 mb-6">
+                <Flame className="text-burnt-orange" size={22} />
+                <h3 className="font-heading text-2xl font-semibold text-bark">Best Sellers</h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
+                {bestsellers.map((product, idx) => (
+                  <div
+                    key={product.id || idx}
+                    className="bg-white rounded-2xl overflow-hidden border-2 border-burnt-orange/20 hover:border-burnt-orange/40 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 group relative"
+                    data-testid={`bestseller-card-${product.id || idx}`}
+                  >
+                    <div className="absolute top-3 left-3 z-10 flex items-center gap-1 bg-burnt-orange text-white text-xs font-bold px-2.5 py-1 rounded-full shadow">
+                      <Flame size={12} /> Best Seller
+                    </div>
+                    <div className="relative h-40 overflow-hidden cursor-pointer" onClick={() => setSelectedProduct(product)}>
+                      <img
+                        src={product.image || '/images/logo.jpg'}
+                        alt={product.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        loading="lazy"
+                      />
+                    </div>
+                    <div className="p-4">
+                      <h3 className="font-heading font-semibold text-bark text-sm mb-1 truncate">{product.name}</h3>
+                      <div className="flex items-center justify-between">
+                        <span className="text-base font-bold text-burnt-orange">&#8369;{product.price}</span>
+                        <button
+                          onClick={() => onOrder(product)}
+                          className="px-3 py-1.5 bg-burnt-orange text-white rounded-full text-xs font-semibold hover:bg-burnt-orange-dark transition-all"
+                          data-testid={`bestseller-order-${product.id || idx}`}
+                        >
+                          Order
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Category Filter Tabs */}
-          {categories.length > 0 && (
-            <div className="flex flex-wrap justify-center gap-2 mb-10" data-testid="category-filters">
+          <div className="flex flex-wrap justify-center gap-2 mb-10" data-testid="category-filters">
+            <button
+              onClick={() => setActiveCategory('all')}
+              className={`px-5 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${
+                activeCategory === 'all'
+                  ? 'bg-burnt-orange text-white shadow-md'
+                  : 'bg-white text-bark-light border border-soft-border hover:border-burnt-orange/40 hover:text-burnt-orange'
+              }`}
+              data-testid="category-filter-all"
+            >
+              All
+            </button>
+            {bestsellers.length > 0 && (
               <button
-                onClick={() => setActiveCategory('all')}
-                className={`px-5 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${
-                  activeCategory === 'all'
+                onClick={() => setActiveCategory('bestsellers')}
+                className={`px-5 py-2 rounded-full text-sm font-semibold transition-all duration-300 flex items-center gap-1.5 ${
+                  activeCategory === 'bestsellers'
                     ? 'bg-burnt-orange text-white shadow-md'
                     : 'bg-white text-bark-light border border-soft-border hover:border-burnt-orange/40 hover:text-burnt-orange'
                 }`}
-                data-testid="category-filter-all"
+                data-testid="category-filter-bestsellers"
               >
-                All
+                <Flame size={14} /> Best Sellers
               </button>
-              {categories.map(cat => (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveCategory(cat.id)}
-                  className={`px-5 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${
-                    activeCategory === cat.id
-                      ? 'bg-burnt-orange text-white shadow-md'
-                      : 'bg-white text-bark-light border border-soft-border hover:border-burnt-orange/40 hover:text-burnt-orange'
-                  }`}
-                  data-testid={`category-filter-${cat.id}`}
-                >
-                  {cat.name}
-                </button>
-              ))}
-            </div>
-          )}
+            )}
+            {categories.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => setActiveCategory(cat.id)}
+                className={`px-5 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${
+                  activeCategory === cat.id
+                    ? 'bg-burnt-orange text-white shadow-md'
+                    : 'bg-white text-bark-light border border-soft-border hover:border-burnt-orange/40 hover:text-burnt-orange'
+                }`}
+                data-testid={`category-filter-${cat.id}`}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
 
           {filteredProducts.length === 0 ? (
             <div className="text-center py-16 text-mocha">
@@ -85,15 +143,22 @@ export default function Menu({ products, loading, onOrder }) {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       loading="lazy"
                     />
-                    {/* Category badge */}
-                    {product.category_id && categories.length > 0 && (() => {
-                      const cat = categories.find(c => c.id === product.category_id);
-                      return cat ? (
-                        <span className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm text-bark text-xs font-semibold px-2.5 py-1 rounded-full shadow-sm">
-                          {cat.name}
+                    {/* Badges */}
+                    <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+                      {product.is_bestseller && (
+                        <span className="flex items-center gap-1 bg-burnt-orange text-white text-xs font-bold px-2.5 py-1 rounded-full shadow">
+                          <Flame size={11} /> Best Seller
                         </span>
-                      ) : null;
-                    })()}
+                      )}
+                      {product.category_id && categories.length > 0 && (() => {
+                        const cat = categories.find(c => c.id === product.category_id);
+                        return cat ? (
+                          <span className="bg-white/90 backdrop-blur-sm text-bark text-xs font-semibold px-2.5 py-1 rounded-full shadow-sm">
+                            {cat.name}
+                          </span>
+                        ) : null;
+                      })()}
+                    </div>
                   </div>
                   <div className="p-5">
                     <h3 className="font-heading font-semibold text-bark mb-1">{product.name}</h3>
@@ -135,6 +200,11 @@ export default function Menu({ products, loading, onOrder }) {
             <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 z-10 w-9 h-9 bg-white/90 rounded-full flex items-center justify-center text-xl font-bold text-bark shadow hover:bg-white transition-colors" data-testid="close-lightbox">
               &times;
             </button>
+            {selectedProduct.is_bestseller && (
+              <div className="absolute top-4 left-4 z-10 flex items-center gap-1 bg-burnt-orange text-white text-sm font-bold px-3 py-1.5 rounded-full shadow">
+                <Flame size={14} /> Best Seller
+              </div>
+            )}
             <img src={selectedProduct.image || '/images/logo.jpg'} alt={selectedProduct.name} className="w-full h-80 md:h-[450px] object-contain bg-warm-sand" />
             <div className="p-6">
               <h3 className="font-heading text-2xl font-semibold text-bark mb-2">{selectedProduct.name}</h3>

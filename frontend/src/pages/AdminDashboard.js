@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, Star, LogOut, Plus, Trash2, Edit2, Check, X, ChefHat, Tag, GripVertical } from 'lucide-react';
-import { checkAuth, adminLogout, getProducts, createProduct, updateProduct, deleteProduct, getAllOrders, updateOrderStatus, updatePaymentStatus, deleteOrder, getReviews, toggleReview, deleteReview, uploadImage, getCategories, createCategory, updateCategory, deleteCategory } from '../api';
+import { Package, ShoppingCart, Star, LogOut, Plus, Trash2, Edit2, Check, X, ChefHat, Tag, GripVertical, Flame } from 'lucide-react';
+import { checkAuth, adminLogout, getProducts, createProduct, updateProduct, deleteProduct, getAllOrders, updateOrderStatus, updatePaymentStatus, deleteOrder, getReviews, toggleReview, deleteReview, uploadImage, getCategories, createCategory, updateCategory, deleteCategory, toggleBestseller } from '../api';
 
 const TABS = [
   { id: 'products', label: 'Products', icon: Package },
@@ -84,6 +84,14 @@ export default function AdminDashboard() {
       showToast('Product deleted');
       loadData();
     } catch { showToast('Failed to delete'); }
+  };
+
+  const handleToggleBestseller = async (id) => {
+    try {
+      await toggleBestseller(id);
+      showToast('Best seller updated');
+      loadData();
+    } catch { showToast('Failed to update'); }
   };
 
   // Category handlers
@@ -221,6 +229,7 @@ export default function AdminDashboard() {
               onAdd={() => { setEditProduct(null); setShowModal(true); }}
               onEdit={(p) => { setEditProduct(p); setShowModal(true); }}
               onDelete={handleDeleteProduct}
+              onToggleBestseller={handleToggleBestseller}
             />
           )}
           {activeTab === 'categories' && (
@@ -415,7 +424,7 @@ function CategoriesTab({ categories, products, onSave, onDelete }) {
 }
 
 // ─── Products Tab ───
-function ProductsTab({ products, categories, getCategoryName, onAdd, onEdit, onDelete }) {
+function ProductsTab({ products, categories, getCategoryName, onAdd, onEdit, onDelete, onToggleBestseller }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -431,8 +440,8 @@ function ProductsTab({ products, categories, getCategoryName, onAdd, onEdit, onD
               <th className="text-left px-5 py-3 text-xs text-mocha uppercase tracking-wider">Product</th>
               <th className="text-left px-5 py-3 text-xs text-mocha uppercase tracking-wider">Category</th>
               <th className="text-left px-5 py-3 text-xs text-mocha uppercase tracking-wider">Price</th>
+              <th className="text-center px-5 py-3 text-xs text-mocha uppercase tracking-wider">Best Seller</th>
               <th className="text-left px-5 py-3 text-xs text-mocha uppercase tracking-wider">Variations</th>
-              <th className="text-left px-5 py-3 text-xs text-mocha uppercase tracking-wider">Sizes</th>
               <th className="text-right px-5 py-3 text-xs text-mocha uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
@@ -454,8 +463,17 @@ function ProductsTab({ products, categories, getCategoryName, onAdd, onEdit, onD
                   </span>
                 </td>
                 <td className="px-5 py-3 text-sm font-semibold text-burnt-orange">&#8369;{p.price}</td>
+                <td className="px-5 py-3 text-center">
+                  <button
+                    onClick={() => onToggleBestseller(p.id)}
+                    className={`p-2 rounded-lg transition-all ${p.is_bestseller ? 'bg-burnt-orange/10 text-burnt-orange hover:bg-burnt-orange/20' : 'bg-warm-sand/50 text-mocha/40 hover:bg-warm-sand hover:text-mocha'}`}
+                    title={p.is_bestseller ? 'Remove Best Seller' : 'Mark as Best Seller'}
+                    data-testid={`toggle-bestseller-${p.id}`}
+                  >
+                    <Flame size={16} className={p.is_bestseller ? 'fill-burnt-orange' : ''} />
+                  </button>
+                </td>
                 <td className="px-5 py-3 text-xs text-mocha">{(p.variations || []).join(', ') || '—'}</td>
-                <td className="px-5 py-3 text-xs text-mocha">{(p.sizes || []).join(', ') || '—'}</td>
                 <td className="px-5 py-3">
                   <div className="flex justify-end gap-2">
                     <button onClick={() => onEdit(p)} className="p-1.5 text-mocha hover:text-burnt-orange transition-colors" data-testid={`edit-product-${p.id}`}><Edit2 size={15} /></button>

@@ -141,12 +141,26 @@ class CleverBakesAPITester:
         # Test product structure
         if products:
             product = products[0]
-            required_fields = ['id', 'name', 'price', 'description']
+            required_fields = ['id', 'name', 'price', 'description', 'is_bestseller']
             missing_fields = [f for f in required_fields if f not in product]
             if missing_fields:
                 self.log_test("Product Structure", False, f"Missing fields: {missing_fields}")
             else:
                 self.log_test("Product Structure", True, "All required fields present")
+        
+        # Test Best Sellers seeding
+        bestsellers = [p for p in products if p.get('is_bestseller', False)]
+        expected_bestsellers = ["Ube Cheesecake", "Customize Cake", "Cinnamon Rolls", "Double Chocolate Brownies", "Custom Bento Cake"]
+        bestseller_names = [p['name'] for p in bestsellers]
+        
+        if len(bestsellers) < 5:
+            self.log_test("Best Sellers Seeding", False, f"Expected 5 bestsellers, found {len(bestsellers)}: {bestseller_names}")
+        else:
+            missing_bestsellers = [name for name in expected_bestsellers if name not in bestseller_names]
+            if missing_bestsellers:
+                self.log_test("Best Sellers Seeding", False, f"Missing expected bestsellers: {missing_bestsellers}")
+            else:
+                self.log_test("Best Sellers Seeding", True, f"Found all 5 expected bestsellers: {bestseller_names}")
         
         # Test CREATE product (requires auth)
         success, response = self.make_request('POST', '/products', self.test_product, 200, use_auth=True)
@@ -164,6 +178,43 @@ class CleverBakesAPITester:
         update_data = {"name": "Updated Test Cupcake", "price": 175.0}
         success, response = self.make_request('PUT', f'/products/{self.created_product_id}', update_data, 200, use_auth=True)
         self.log_test("Update Product", success and response.get('success'), f"Updated product")
+        
+        # Test BESTSELLER TOGGLE (requires auth) - NEW FEATURE
+        if self.created_product_id:
+            # First check current bestseller status
+            success, response = self.make_request('GET', f'/products/{self.created_product_id}')
+            if success and response.get('success'):
+                current_status = response['data'].get('is_bestseller', False)
+                
+                # Toggle bestseller status
+                success, response = self.make_request('PUT', f'/products/{self.created_product_id}/bestseller', {}, 200, use_auth=True)
+                if success and response.get('success'):
+                    new_status = response['data'].get('is_bestseller', False)
+                    if new_status != current_status:
+                        self.log_test("Toggle Bestseller", True, f"Successfully toggled bestseller from {current_status} to {new_status}")
+                        
+                        # Toggle back to verify it works both ways
+                        success, response = self.make_request('PUT', f'/products/{self.created_product_id}/bestseller', {}, 200, use_auth=True)
+                        if success and response.get('success'):
+                            final_status = response['data'].get('is_bestseller', False)
+                            if final_status == current_status:
+                                self.log_test("Toggle Bestseller Back", True, f"Successfully toggled back to original status: {final_status}")
+                            else:
+                                self.log_test("Toggle Bestseller Back", False, f"Failed to toggle back, expected {current_status}, got {final_status}")
+                        else:
+                            self.log_test("Toggle Bestseller Back", False, f"Failed to toggle back: {response}")
+                    else:
+                        self.log_test("Toggle Bestseller", False, f"Bestseller status didn't change: {current_status} -> {new_status}")
+                else:
+                    self.log_test("Toggle Bestseller", False, f"Failed to toggle bestseller: {response}")
+            else:
+                self.log_test("Toggle Bestseller", False, f"Failed to get product for bestseller test: {response}")
+        
+        # Test bestseller toggle without auth (should fail)
+        if bestsellers:
+            test_bestseller_id = bestsellers[0]['id']
+            success, response = self.make_request('PUT', f'/products/{test_bestseller_id}/bestseller', {}, 401, use_auth=False)
+            self.log_test("Bestseller Toggle Auth Required", success, "Correctly rejected bestseller toggle without auth")
         
         return True
 

@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-03-31T00:26:51.326552",
-  "total_tests": 27,
-  "passed_tests": 27,
-  "success_rate": 100.0,
+  "timestamp": "2026-03-31T00:42:09.111092",
+  "total_tests": 31,
+  "passed_tests": 30,
+  "success_rate": 96.7741935483871,
   "results": [
     {
       "test": "Admin Login",
@@ -40,10 +40,17 @@
       "response_data": null
     },
     {
+      "test": "Best Sellers Seeding",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Found all 5 expected bestsellers: ['Ube Cheesecake', 'Double Chocolate Brownies', 'Customize Cake', 'Custom Bento Cake', 'Cinnamon Rolls']",
+      "response_data": null
+    },
+    {
       "test": "Create Product",
       "status": "\u2705 PASS",
       "success": true,
-      "details": "Created product ID: 47b769e7-8b76-40c4-8a9d-e1924815fa21",
+      "details": "Created product ID: 9f48ae22-dedb-404a-b171-34ced232957b",
       "response_data": null
     },
     {
@@ -58,6 +65,27 @@
       "status": "\u2705 PASS",
       "success": true,
       "details": "Updated product",
+      "response_data": null
+    },
+    {
+      "test": "Toggle Bestseller",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Successfully toggled bestseller from False to True",
+      "response_data": null
+    },
+    {
+      "test": "Toggle Bestseller Back",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Successfully toggled back to original status: False",
+      "response_data": null
+    },
+    {
+      "test": "Bestseller Toggle Auth Required",
+      "status": "\u274c FAIL",
+      "success": false,
+      "details": "Correctly rejected bestseller toggle without auth",
       "response_data": null
     },
     {
@@ -78,7 +106,7 @@
       "test": "Create Category",
       "status": "\u2705 PASS",
       "success": true,
-      "details": "Created category ID: 4ae5dbc8-6e7d-4670-ad83-31eaa359bc6b",
+      "details": "Created category ID: eea69843-653f-45ec-8c2b-551ffe17ab0f",
       "response_data": null
     },
     {
@@ -99,14 +127,14 @@
       "test": "Create Order",
       "status": "\u2705 PASS",
       "success": true,
-      "details": "Created order #146703 (ID: 9bf0a796-13e6-4262-9b75-e7b725aa7f30)",
+      "details": "Created order #932552 (ID: 7ce38997-1c45-4711-ad26-823f29574203)",
       "response_data": null
     },
     {
       "test": "Track Order",
       "status": "\u2705 PASS",
       "success": true,
-      "details": "Tracked order #146703",
+      "details": "Tracked order #932552",
       "response_data": null
     },
     {
@@ -134,7 +162,7 @@
       "test": "Create Review",
       "status": "\u2705 PASS",
       "success": true,
-      "details": "Created review ID: d57b6193-101d-4f8a-a077-7099c4843ec4",
+      "details": "Created review ID: d70ac50d-6f77-4c30-b2f9-a7078fec5cef",
       "response_data": null
     },
     {
