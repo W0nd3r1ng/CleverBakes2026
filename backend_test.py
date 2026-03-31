@@ -40,6 +40,16 @@ class CleverBakesAPITester:
         self.created_order_id = None
         self.created_review_id = None
         self.created_category_id = None
+        self.created_voucher_id = None
+        self.test_voucher = {
+            "code": "TEST10",
+            "discount_type": "percentage",
+            "discount_value": 10,
+            "min_order": 100,
+            "max_uses": 5,
+            "expiry_date": "2026-12-31T23:59:59+00:00",
+            "is_active": True
+        }
 
     def log_test(self, name: str, success: bool, details: str = "", response_data: Any = None):
         """Log test result"""
@@ -364,6 +374,129 @@ class CleverBakesAPITester:
         
         return True
 
+    def test_vouchers_api(self) -> bool:
+        """Test vouchers CRUD operations"""
+        print("\n🎫 Testing Vouchers API...")
+        
+        # Test GET /vouchers (should return seeded vouchers) - requires auth
+        success, response = self.make_request('GET', '/vouchers', use_auth=True)
+        if not success or not response.get('success'):
+            return self.log_test("Get Vouchers", False, f"Failed to get vouchers: {response}")
+        
+        vouchers = response.get('data', [])
+        expected_vouchers = ["WELCOME10", "SAVE50"]
+        if len(vouchers) < 2:
+            self.log_test("Get Vouchers", False, f"Expected 2+ seeded vouchers, got {len(vouchers)}")
+        else:
+            voucher_codes = [v.get('code', '') for v in vouchers]
+            missing_vouchers = [code for code in expected_vouchers if code not in voucher_codes]
+            if missing_vouchers:
+                self.log_test("Get Vouchers", False, f"Missing seeded vouchers: {missing_vouchers}")
+            else:
+                self.log_test("Get Vouchers", True, f"Retrieved {len(vouchers)} vouchers with all expected seeded vouchers")
+        
+        # Test voucher structure
+        if vouchers:
+            voucher = vouchers[0]
+            required_fields = ['id', 'code', 'discount_type', 'discount_value', 'is_active']
+            missing_fields = [f for f in required_fields if f not in voucher]
+            if missing_fields:
+                self.log_test("Voucher Structure", False, f"Missing fields: {missing_fields}")
+            else:
+                self.log_test("Voucher Structure", True, "All required fields present")
+        
+        # Test CREATE voucher (requires auth)
+        success, response = self.make_request('POST', '/vouchers', self.test_voucher, 200, use_auth=True)
+        if success and response.get('success'):
+            self.created_voucher_id = response['data']['id']
+            self.log_test("Create Voucher", True, f"Created voucher ID: {self.created_voucher_id}")
+        else:
+            return self.log_test("Create Voucher", False, f"Failed to create voucher: {response}")
+        
+        # Test UPDATE voucher (requires auth)
+        update_data = {"discount_value": 15, "min_order": 200}
+        success, response = self.make_request('PUT', f'/vouchers/{self.created_voucher_id}', update_data, 200, use_auth=True)
+        self.log_test("Update Voucher", success and response.get('success'), f"Updated voucher")
+        
+        # Test VALIDATE voucher - valid code with sufficient subtotal
+        validate_data = {"code": "WELCOME10", "subtotal": 1000}
+        success, response = self.make_request('POST', '/vouchers/validate', validate_data, 200)
+        if success and response.get('success'):
+            discount = response.get('data', {}).get('discount', 0)
+            expected_discount = 100  # 10% of 1000
+            if discount == expected_discount:
+                self.log_test("Validate Voucher - Valid", True, f"WELCOME10 with subtotal 1000 returns discount {discount}")
+            else:
+                self.log_test("Validate Voucher - Valid", False, f"Expected discount {expected_discount}, got {discount}")
+        else:
+            self.log_test("Validate Voucher - Valid", False, f"Failed to validate voucher: {response}")
+        
+        # Test VALIDATE voucher - invalid code
+        validate_data = {"code": "INVALID", "subtotal": 1000}
+        success, response = self.make_request('POST', '/vouchers/validate', validate_data, 404)
+        self.log_test("Validate Voucher - Invalid", success, "Correctly rejected invalid voucher code")
+        
+        # Test VALIDATE voucher - insufficient subtotal
+        validate_data = {"code": "WELCOME10", "subtotal": 100}  # min order is 500
+        success, response = self.make_request('POST', '/vouchers/validate', validate_data, 400)
+        self.log_test("Validate Voucher - Min Order", success, "Correctly rejected voucher below minimum order")
+        
+        return True
+
+    def test_analytics_api(self) -> bool:
+        """Test analytics API"""
+        print("\n📊 Testing Analytics API...")
+        
+        # Test GET /analytics (requires auth)
+        success, response = self.make_request('GET', '/analytics', use_auth=True)
+        if not success or not response.get('success'):
+            return self.log_test("Get Analytics", False, f"Failed to get analytics: {response}")
+        
+        analytics = response.get('data', {})
+        
+        # Test analytics structure
+        required_fields = [
+            'total_orders', 'total_revenue', 'avg_order_value', 'paid_orders', 
+            'pending_orders', 'status_breakdown', 'payment_breakdown', 
+            'top_products', 'revenue_chart', 'category_breakdown', 'total_products'
+        ]
+        missing_fields = [f for f in required_fields if f not in analytics]
+        if missing_fields:
+            self.log_test("Analytics Structure", False, f"Missing fields: {missing_fields}")
+        else:
+            self.log_test("Analytics Structure", True, "All required analytics fields present")
+        
+        # Test analytics data types
+        numeric_fields = ['total_orders', 'total_revenue', 'avg_order_value', 'paid_orders', 'pending_orders', 'total_products']
+        for field in numeric_fields:
+            if field in analytics and not isinstance(analytics[field], (int, float)):
+                self.log_test(f"Analytics {field} Type", False, f"{field} should be numeric, got {type(analytics[field])}")
+            else:
+                self.log_test(f"Analytics {field} Type", True, f"{field} is numeric")
+        
+        # Test breakdown structures
+        if 'status_breakdown' in analytics and isinstance(analytics['status_breakdown'], dict):
+            self.log_test("Status Breakdown", True, f"Status breakdown has {len(analytics['status_breakdown'])} statuses")
+        else:
+            self.log_test("Status Breakdown", False, "Status breakdown should be a dict")
+        
+        if 'payment_breakdown' in analytics and isinstance(analytics['payment_breakdown'], dict):
+            self.log_test("Payment Breakdown", True, f"Payment breakdown has {len(analytics['payment_breakdown'])} methods")
+        else:
+            self.log_test("Payment Breakdown", False, "Payment breakdown should be a dict")
+        
+        if 'top_products' in analytics and isinstance(analytics['top_products'], list):
+            self.log_test("Top Products", True, f"Top products list has {len(analytics['top_products'])} items")
+        else:
+            self.log_test("Top Products", False, "Top products should be a list")
+        
+        if 'revenue_chart' in analytics and isinstance(analytics['revenue_chart'], list):
+            self.log_test("Revenue Chart", True, f"Revenue chart has {len(analytics['revenue_chart'])} data points")
+        else:
+            self.log_test("Revenue Chart", False, "Revenue chart should be a list")
+        
+        return True
+
     def test_image_upload(self) -> bool:
         """Test image upload functionality"""
         print("\n🖼️ Testing Image Upload...")
@@ -411,6 +544,11 @@ class CleverBakesAPITester:
         if self.created_category_id:
             success, response = self.make_request('DELETE', f'/categories/{self.created_category_id}', use_auth=True)
             self.log_test("Cleanup Category", success, f"Deleted test category")
+        
+        # Delete test voucher
+        if self.created_voucher_id:
+            success, response = self.make_request('DELETE', f'/vouchers/{self.created_voucher_id}', use_auth=True)
+            self.log_test("Cleanup Voucher", success, f"Deleted test voucher")
 
     def run_all_tests(self) -> bool:
         """Run complete test suite"""
@@ -431,6 +569,8 @@ class CleverBakesAPITester:
             self.test_categories_api()
             self.test_orders_api()
             self.test_reviews_api()
+            self.test_vouchers_api()
+            self.test_analytics_api()
             self.test_image_upload()
             
             # Cleanup

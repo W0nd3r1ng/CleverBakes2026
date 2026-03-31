@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { createOrder } from '../../api';
-import { X, Upload } from 'lucide-react';
+import { createOrder, validateVoucher } from '../../api';
+import { X, Upload, Tag, Check } from 'lucide-react';
 
 const DELIVERY_METHODS = ['Pick Up', 'Meet Up', 'Delivery'];
 const PAYMENT_METHODS = ['COD', 'GCash'];
@@ -17,12 +17,18 @@ export default function OrderModal({ product, onClose }) {
     deliveryMethod: 'Pick Up',
     paymentMethod: 'COD',
     gcashProof: '',
+    voucherCode: '',
   });
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(null);
+  const [discount, setDiscount] = useState(0);
+  const [voucherApplied, setVoucherApplied] = useState(null);
+  const [voucherError, setVoucherError] = useState('');
+  const [applyingVoucher, setApplyingVoucher] = useState(false);
 
-  const total = product.price * (form.quantity || 0);
+  const subtotal = product.price * (form.quantity || 0);
+  const total = Math.max(0, subtotal - discount);
 
   const handleChange = (name, value) => {
     setForm(f => ({ ...f, [name]: value }));
@@ -40,6 +46,31 @@ export default function OrderModal({ product, onClose }) {
     const reader = new FileReader();
     reader.onload = () => handleChange('gcashProof', reader.result);
     reader.readAsDataURL(file);
+  };
+
+  const handleApplyVoucher = async () => {
+    if (!form.voucherCode.trim()) return;
+    setApplyingVoucher(true);
+    setVoucherError('');
+    setVoucherApplied(null);
+    setDiscount(0);
+    try {
+      const res = await validateVoucher(form.voucherCode.trim(), subtotal);
+      setDiscount(res.data.discount);
+      setVoucherApplied(res.data.voucher);
+    } catch (err) {
+      setVoucherError(err.response?.data?.detail || 'Invalid voucher');
+      setDiscount(0);
+    } finally {
+      setApplyingVoucher(false);
+    }
+  };
+
+  const handleRemoveVoucher = () => {
+    setForm(f => ({ ...f, voucherCode: '' }));
+    setVoucherApplied(null);
+    setDiscount(0);
+    setVoucherError('');
   };
 
   const validate = () => {
@@ -68,23 +99,25 @@ export default function OrderModal({ product, onClose }) {
         flavor: form.flavor,
         size: form.size,
         quantity: form.quantity,
-        total,
+        total: subtotal,
         payment_method: form.paymentMethod,
         gcash_proof: form.gcashProof,
+        voucher_code: voucherApplied ? form.voucherCode : '',
       });
 
       const order = res.data;
-      setSuccess(order.order_number);
+      setSuccess(order);
 
-      // Build FB Messenger message
       let msg = `New CleverBakes Order #${order.order_number}\n\nProduct: ${form.productName}`;
       if (form.flavor) msg += `\nFlavor: ${form.flavor}`;
       if (form.size) msg += `\nSize: ${form.size}`;
-      msg += `\nQuantity: ${form.quantity}\nTotal: PHP ${total}\n\nName: ${form.clientName}\nContact: ${form.contactNumber}\nAddress: ${form.address}\nDelivery: ${form.deliveryMethod}\nPayment: ${form.paymentMethod}`;
+      msg += `\nQuantity: ${form.quantity}`;
+      if (discount > 0) msg += `\nSubtotal: PHP ${subtotal}\nDiscount: -PHP ${discount} (${voucherApplied?.code})`;
+      msg += `\nTotal: PHP ${order.total}\n\nName: ${form.clientName}\nContact: ${form.contactNumber}\nAddress: ${form.address}\nDelivery: ${form.deliveryMethod}\nPayment: ${form.paymentMethod}`;
 
       const messengerUrl = `https://m.me/61554594188313?text=${encodeURIComponent(msg)}`;
       window.open(messengerUrl, '_blank');
-    } catch (err) {
+    } catch {
       alert('Failed to submit order. Please try again.');
     } finally {
       setSubmitting(false);
@@ -100,8 +133,11 @@ export default function OrderModal({ product, onClose }) {
           </div>
           <h3 className="font-heading text-xl font-semibold text-bark mb-2">Order Submitted!</h3>
           <p className="text-mocha mb-2">Your order has been sent to our Messenger.</p>
+          {success.discount > 0 && (
+            <p className="text-sm text-green-600 font-medium mb-2">You saved &#8369;{success.discount} with code {success.voucher_code}!</p>
+          )}
           <p className="text-sm text-bark mb-1">Your tracking number:</p>
-          <p className="text-3xl font-mono font-bold text-burnt-orange mb-4" data-testid="order-tracking-number">{success}</p>
+          <p className="text-3xl font-mono font-bold text-burnt-orange mb-4" data-testid="order-tracking-number">{success.order_number}</p>
           <p className="text-xs text-mocha mb-6">Use this number to track your order status</p>
           <button onClick={onClose} className="px-6 py-3 bg-burnt-orange text-white rounded-xl font-semibold hover:bg-burnt-orange-dark transition-all" data-testid="close-success-button">
             Done
@@ -122,13 +158,11 @@ export default function OrderModal({ product, onClose }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Product */}
           <div>
             <label className="block text-sm font-medium text-bark mb-1">Product</label>
             <input value={form.productName} disabled className="w-full px-4 py-2.5 rounded-xl border border-soft-border bg-warm-sand/50 text-mocha" />
           </div>
 
-          {/* Flavor */}
           {product.variations?.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-bark mb-1">Flavor / Variation</label>
@@ -138,7 +172,6 @@ export default function OrderModal({ product, onClose }) {
             </div>
           )}
 
-          {/* Size */}
           {product.sizes?.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-bark mb-1">Size</label>
@@ -148,35 +181,30 @@ export default function OrderModal({ product, onClose }) {
             </div>
           )}
 
-          {/* Quantity */}
           <div>
             <label className="block text-sm font-medium text-bark mb-1">Quantity</label>
-            <input type="number" min="1" value={form.quantity} onChange={e => handleChange('quantity', parseInt(e.target.value) || 0)} className={`w-full px-4 py-2.5 rounded-xl border ${errors.quantity ? 'border-red-300 bg-red-50' : 'border-soft-border'} bg-white text-bark focus:outline-none focus:ring-2 focus:ring-burnt-orange/30`} data-testid="quantity-input" />
+            <input type="number" min="1" value={form.quantity} onChange={e => { handleChange('quantity', parseInt(e.target.value) || 0); setDiscount(0); setVoucherApplied(null); }} className={`w-full px-4 py-2.5 rounded-xl border ${errors.quantity ? 'border-red-300 bg-red-50' : 'border-soft-border'} bg-white text-bark focus:outline-none focus:ring-2 focus:ring-burnt-orange/30`} data-testid="quantity-input" />
             {errors.quantity && <p className="text-xs text-red-500 mt-1">{errors.quantity}</p>}
           </div>
 
-          {/* Client Name */}
           <div>
             <label className="block text-sm font-medium text-bark mb-1">Your Name <span className="text-red-400">*</span></label>
             <input value={form.clientName} onChange={e => handleChange('clientName', e.target.value)} placeholder="Full name" className={`w-full px-4 py-2.5 rounded-xl border ${errors.clientName ? 'border-red-300 bg-red-50' : 'border-soft-border'} bg-white text-bark focus:outline-none focus:ring-2 focus:ring-burnt-orange/30`} data-testid="client-name-input" />
             {errors.clientName && <p className="text-xs text-red-500 mt-1">{errors.clientName}</p>}
           </div>
 
-          {/* Contact */}
           <div>
             <label className="block text-sm font-medium text-bark mb-1">Contact Number <span className="text-red-400">*</span></label>
             <input value={form.contactNumber} onChange={e => handleContactChange(e.target.value)} placeholder="09123456789" maxLength={11} inputMode="numeric" className={`w-full px-4 py-2.5 rounded-xl border ${errors.contactNumber ? 'border-red-300 bg-red-50' : 'border-soft-border'} bg-white text-bark focus:outline-none focus:ring-2 focus:ring-burnt-orange/30`} data-testid="contact-input" />
             {errors.contactNumber && <p className="text-xs text-red-500 mt-1">{errors.contactNumber}</p>}
           </div>
 
-          {/* Address */}
           <div>
             <label className="block text-sm font-medium text-bark mb-1">Address <span className="text-red-400">*</span></label>
             <textarea value={form.address} onChange={e => handleChange('address', e.target.value)} rows={2} placeholder="Complete address" className={`w-full px-4 py-2.5 rounded-xl border ${errors.address ? 'border-red-300 bg-red-50' : 'border-soft-border'} bg-white text-bark focus:outline-none focus:ring-2 focus:ring-burnt-orange/30 resize-none`} data-testid="address-input" />
             {errors.address && <p className="text-xs text-red-500 mt-1">{errors.address}</p>}
           </div>
 
-          {/* Delivery Method */}
           <div>
             <label className="block text-sm font-medium text-bark mb-2">Delivery Method</label>
             <div className="flex flex-wrap gap-3">
@@ -189,7 +217,6 @@ export default function OrderModal({ product, onClose }) {
             </div>
           </div>
 
-          {/* Payment Method */}
           <div>
             <label className="block text-sm font-medium text-bark mb-2">Payment Method</label>
             <div className="flex flex-wrap gap-3">
@@ -202,11 +229,10 @@ export default function OrderModal({ product, onClose }) {
             </div>
           </div>
 
-          {/* GCash Upload */}
           {form.paymentMethod === 'GCash' && (
             <div className={`p-4 rounded-xl border ${errors.gcashProof ? 'border-red-300 bg-red-50' : 'border-soft-border bg-warm-sand/30'}`} data-testid="gcash-section">
               <p className="text-sm font-medium text-bark mb-2">GCash Payment</p>
-              <p className="text-xs text-mocha mb-3">Send payment to <strong>0938-780-5835</strong> (Clever Bake's) then upload your receipt/screenshot below.</p>
+              <p className="text-xs text-mocha mb-3">Send payment to <strong>0938-780-5835</strong> (Clever Bake's) then upload your receipt below.</p>
               <label className="flex items-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-soft-border bg-white cursor-pointer hover:border-burnt-orange/30 transition-colors">
                 <Upload size={16} className="text-mocha" />
                 <span className="text-sm text-mocha">{form.gcashProof ? 'Receipt uploaded' : 'Upload receipt screenshot'}</span>
@@ -217,13 +243,65 @@ export default function OrderModal({ product, onClose }) {
             </div>
           )}
 
-          {/* Total */}
-          <div className="flex items-center justify-between p-4 rounded-xl bg-burnt-orange/5 border border-burnt-orange/10">
-            <span className="font-medium text-bark">Total</span>
-            <span className="text-2xl font-bold text-burnt-orange" data-testid="order-total">&#8369;{total}</span>
+          {/* Voucher Code */}
+          <div data-testid="voucher-section">
+            <label className="block text-sm font-medium text-bark mb-1">Voucher Code</label>
+            {voucherApplied ? (
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-green-50 border border-green-200">
+                <Check size={16} className="text-green-600" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-green-700">{voucherApplied.code} applied!</p>
+                  <p className="text-xs text-green-600">
+                    {voucherApplied.discount_type === 'percentage' ? `${voucherApplied.discount_value}% off` : `₱${voucherApplied.discount_value} off`}
+                    {' '} — You save &#8369;{discount}
+                  </p>
+                </div>
+                <button type="button" onClick={handleRemoveVoucher} className="text-xs text-red-500 hover:text-red-700 font-medium" data-testid="remove-voucher-button">Remove</button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-mocha" size={15} />
+                  <input
+                    value={form.voucherCode}
+                    onChange={e => { handleChange('voucherCode', e.target.value.toUpperCase()); setVoucherError(''); }}
+                    placeholder="Enter code"
+                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-soft-border bg-white text-bark uppercase placeholder:normal-case focus:outline-none focus:ring-2 focus:ring-burnt-orange/30"
+                    data-testid="voucher-input"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleApplyVoucher}
+                  disabled={applyingVoucher || !form.voucherCode.trim()}
+                  className="px-4 py-2.5 bg-bark text-white rounded-xl text-sm font-semibold hover:bg-bark-light transition-all disabled:opacity-40"
+                  data-testid="apply-voucher-button"
+                >
+                  {applyingVoucher ? '...' : 'Apply'}
+                </button>
+              </div>
+            )}
+            {voucherError && <p className="text-xs text-red-500 mt-1" data-testid="voucher-error">{voucherError}</p>}
           </div>
 
-          {/* Submit */}
+          {/* Total */}
+          <div className="p-4 rounded-xl bg-burnt-orange/5 border border-burnt-orange/10 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-mocha">Subtotal</span>
+              <span className="text-sm text-bark">&#8369;{subtotal}</span>
+            </div>
+            {discount > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-green-600">Discount ({voucherApplied?.code})</span>
+                <span className="text-sm font-medium text-green-600">-&#8369;{discount}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between pt-2 border-t border-burnt-orange/10">
+              <span className="font-semibold text-bark">Total</span>
+              <span className="text-2xl font-bold text-burnt-orange" data-testid="order-total">&#8369;{total}</span>
+            </div>
+          </div>
+
           <button
             type="submit"
             disabled={submitting}

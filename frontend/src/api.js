@@ -40,6 +40,16 @@ export const adminLogin = (username, password) => api.post('/auth/login', { user
 export const adminLogout = () => api.post('/auth/logout').then(r => r.data);
 export const checkAuth = () => api.get('/auth/me').then(r => r.data);
 
+// Vouchers
+export const getVouchers = () => api.get('/vouchers').then(r => r.data);
+export const createVoucher = (data) => api.post('/vouchers', data).then(r => r.data);
+export const updateVoucher = (id, data) => api.put(`/vouchers/${id}`, data).then(r => r.data);
+export const deleteVoucher = (id) => api.delete(`/vouchers/${id}`).then(r => r.data);
+export const validateVoucher = (code, subtotal) => api.post('/vouchers/validate', { code, subtotal }).then(r => r.data);
+
+// Analytics
+export const getAnalytics = () => api.get('/analytics').then(r => r.data);
+
 // Upload
 export const uploadImage = (file) => {
   const formData = new FormData();

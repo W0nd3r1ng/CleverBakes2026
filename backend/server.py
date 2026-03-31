@@ -128,6 +128,7 @@ class OrderCreate(BaseModel):
     total: float = 0
     payment_method: str = "COD"
     gcash_proof: Optional[str] = ""
+    voucher_code: Optional[str] = ""
 
 class OrderStatusUpdate(BaseModel):
     status: str
@@ -142,6 +143,24 @@ class ReviewCreate(BaseModel):
 
 class ReviewToggle(BaseModel):
     approved: bool
+
+class VoucherCreate(BaseModel):
+    code: str
+    discount_type: str = "percentage"  # "percentage" or "fixed"
+    discount_value: float = 10
+    min_order: Optional[float] = 0
+    max_uses: Optional[int] = 0
+    expiry_date: Optional[str] = ""
+    is_active: Optional[bool] = True
+
+class VoucherUpdate(BaseModel):
+    code: Optional[str] = None
+    discount_type: Optional[str] = None
+    discount_value: Optional[float] = None
+    min_order: Optional[float] = None
+    max_uses: Optional[int] = None
+    expiry_date: Optional[str] = None
+    is_active: Optional[bool] = None
 
 # ─── Auth ───
 
@@ -285,9 +304,22 @@ async def toggle_bestseller(product_id: str, request: Request):
 @api_router.post("/orders")
 async def create_order(data: OrderCreate):
     order_number = generate_order_number()
-    # Ensure unique
     while await db.orders.find_one({"order_number": order_number}):
         order_number = generate_order_number()
+    
+    discount = 0
+    voucher_code = ""
+    if data.voucher_code:
+        voucher = await db.vouchers.find_one({"code": data.voucher_code.upper(), "is_active": True})
+        if voucher:
+            if voucher["discount_type"] == "percentage":
+                discount = round(data.total * (voucher["discount_value"] / 100), 2)
+            else:
+                discount = min(voucher["discount_value"], data.total)
+            voucher_code = voucher["code"]
+            await db.vouchers.update_one({"id": voucher["id"]}, {"$inc": {"times_used": 1}})
+    
+    final_total = round(data.total - discount, 2)
     
     order = {
         "id": str(uuid.uuid4()),
@@ -300,7 +332,10 @@ async def create_order(data: OrderCreate):
         "flavor": data.flavor or "",
         "size": data.size or "",
         "quantity": data.quantity,
-        "total": data.total,
+        "subtotal": data.total,
+        "discount": discount,
+        "voucher_code": voucher_code,
+        "total": final_total,
         "payment_method": data.payment_method,
         "gcash_proof": data.gcash_proof or "",
         "payment_status": "Paid" if data.payment_method == "GCash" and data.gcash_proof else "Pending",
@@ -398,6 +433,164 @@ async def delete_review(review_id: str, request: Request):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Review not found")
     return {"success": True, "message": "Review deleted"}
+
+# ─── Vouchers ───
+
+@api_router.get("/vouchers")
+async def get_vouchers(request: Request):
+    await get_current_admin(request)
+    vouchers = await db.vouchers.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return {"success": True, "data": vouchers}
+
+@api_router.post("/vouchers")
+async def create_voucher(data: VoucherCreate, request: Request):
+    await get_current_admin(request)
+    existing = await db.vouchers.find_one({"code": data.code.upper()})
+    if existing:
+        raise HTTPException(status_code=400, detail="Voucher code already exists")
+    voucher = {
+        "id": str(uuid.uuid4()),
+        "code": data.code.upper(),
+        "discount_type": data.discount_type,
+        "discount_value": data.discount_value,
+        "min_order": data.min_order or 0,
+        "max_uses": data.max_uses or 0,
+        "times_used": 0,
+        "expiry_date": data.expiry_date or "",
+        "is_active": data.is_active if data.is_active is not None else True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.vouchers.insert_one(voucher)
+    voucher.pop("_id", None)
+    return {"success": True, "data": voucher}
+
+@api_router.put("/vouchers/{voucher_id}")
+async def update_voucher(voucher_id: str, data: VoucherUpdate, request: Request):
+    await get_current_admin(request)
+    update = {}
+    for field in ["code", "discount_type", "discount_value", "min_order", "max_uses", "expiry_date", "is_active"]:
+        val = getattr(data, field)
+        if val is not None:
+            if field == "code":
+                val = val.upper()
+            update[field] = val
+    if not update:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    result = await db.vouchers.update_one({"id": voucher_id}, {"$set": update})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Voucher not found")
+    voucher = await db.vouchers.find_one({"id": voucher_id}, {"_id": 0})
+    return {"success": True, "data": voucher}
+
+@api_router.delete("/vouchers/{voucher_id}")
+async def delete_voucher(voucher_id: str, request: Request):
+    await get_current_admin(request)
+    result = await db.vouchers.delete_one({"id": voucher_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Voucher not found")
+    return {"success": True, "message": "Voucher deleted"}
+
+@api_router.post("/vouchers/validate")
+async def validate_voucher(request: Request):
+    body = await request.json()
+    code = (body.get("code") or "").upper()
+    subtotal = body.get("subtotal", 0)
+    if not code:
+        raise HTTPException(status_code=400, detail="Voucher code required")
+    voucher = await db.vouchers.find_one({"code": code}, {"_id": 0})
+    if not voucher:
+        raise HTTPException(status_code=404, detail="Invalid voucher code")
+    if not voucher.get("is_active", True):
+        raise HTTPException(status_code=400, detail="This voucher is no longer active")
+    if voucher.get("max_uses") and voucher.get("times_used", 0) >= voucher["max_uses"]:
+        raise HTTPException(status_code=400, detail="This voucher has reached its usage limit")
+    if voucher.get("expiry_date"):
+        try:
+            exp = datetime.fromisoformat(voucher["expiry_date"].replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) > exp:
+                raise HTTPException(status_code=400, detail="This voucher has expired")
+        except ValueError:
+            pass
+    if voucher.get("min_order", 0) > subtotal:
+        raise HTTPException(status_code=400, detail=f"Minimum order of ₱{voucher['min_order']} required")
+    if voucher["discount_type"] == "percentage":
+        discount = round(subtotal * (voucher["discount_value"] / 100), 2)
+    else:
+        discount = min(voucher["discount_value"], subtotal)
+    return {"success": True, "data": {"voucher": voucher, "discount": discount, "new_total": round(subtotal - discount, 2)}}
+
+# ─── Analytics ───
+
+@api_router.get("/analytics")
+async def get_analytics(request: Request):
+    await get_current_admin(request)
+    orders = await db.orders.find({}, {"_id": 0}).to_list(5000)
+    products = await db.products.find({}, {"_id": 0}).to_list(200)
+    categories = await db.categories.find({}, {"_id": 0}).to_list(100)
+
+    total_orders = len(orders)
+    total_revenue = sum(o.get("total", 0) for o in orders)
+    avg_order = round(total_revenue / total_orders, 2) if total_orders else 0
+    paid_orders = sum(1 for o in orders if o.get("payment_status") == "Paid")
+    pending_orders = sum(1 for o in orders if o.get("status") == "Pending")
+
+    # Orders by status
+    status_counts = {}
+    for o in orders:
+        s = o.get("status", "Unknown")
+        status_counts[s] = status_counts.get(s, 0) + 1
+
+    # Payment method breakdown
+    payment_counts = {}
+    for o in orders:
+        pm = o.get("payment_method", "Unknown")
+        payment_counts[pm] = payment_counts.get(pm, 0) + 1
+
+    # Popular products (by order count)
+    product_orders = {}
+    product_revenue = {}
+    for o in orders:
+        pn = o.get("product_name", "Unknown")
+        product_orders[pn] = product_orders.get(pn, 0) + 1
+        product_revenue[pn] = product_revenue.get(pn, 0) + o.get("total", 0)
+    top_products = sorted(product_orders.items(), key=lambda x: x[1], reverse=True)[:8]
+
+    # Revenue by date (last 30 days)
+    daily_revenue = {}
+    daily_orders = {}
+    for o in orders:
+        try:
+            d = o.get("created_at", "")[:10]
+            if d:
+                daily_revenue[d] = daily_revenue.get(d, 0) + o.get("total", 0)
+                daily_orders[d] = daily_orders.get(d, 0) + 1
+        except Exception:
+            pass
+    revenue_chart = [{"date": k, "revenue": v, "orders": daily_orders.get(k, 0)} for k, v in sorted(daily_revenue.items())[-30:]]
+
+    # Category breakdown
+    cat_map = {c["id"]: c["name"] for c in categories}
+    cat_products = {}
+    for p in products:
+        cn = cat_map.get(p.get("category_id", ""), "Uncategorized")
+        cat_products[cn] = cat_products.get(cn, 0) + 1
+
+    return {
+        "success": True,
+        "data": {
+            "total_orders": total_orders,
+            "total_revenue": round(total_revenue, 2),
+            "avg_order_value": avg_order,
+            "paid_orders": paid_orders,
+            "pending_orders": pending_orders,
+            "status_breakdown": status_counts,
+            "payment_breakdown": payment_counts,
+            "top_products": [{"name": n, "orders": c, "revenue": round(product_revenue.get(n, 0), 2)} for n, c in top_products],
+            "revenue_chart": revenue_chart,
+            "category_breakdown": cat_products,
+            "total_products": len(products),
+        }
+    }
 
 # ─── Image Upload ───
 
@@ -523,12 +716,38 @@ async def seed_data():
             await db.reviews.insert_one(review)
         logger.info("Seeded sample reviews")
     
+    # Seed sample vouchers
+    voucher_count = await db.vouchers.count_documents({})
+    if voucher_count == 0:
+        logger.info("Seeding vouchers...")
+        sample_vouchers = [
+            {"code": "WELCOME10", "discount_type": "percentage", "discount_value": 10, "min_order": 500, "max_uses": 100, "expiry_date": "2026-12-31T23:59:59+00:00"},
+            {"code": "SAVE50", "discount_type": "fixed", "discount_value": 50, "min_order": 300, "max_uses": 50, "expiry_date": "2026-06-30T23:59:59+00:00"},
+        ]
+        for v in sample_vouchers:
+            voucher = {
+                "id": str(uuid.uuid4()),
+                "code": v["code"],
+                "discount_type": v["discount_type"],
+                "discount_value": v["discount_value"],
+                "min_order": v["min_order"],
+                "max_uses": v["max_uses"],
+                "times_used": 0,
+                "expiry_date": v["expiry_date"],
+                "is_active": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.vouchers.insert_one(voucher)
+        logger.info("Seeded sample vouchers")
+
     # Create indexes
     await db.categories.create_index("id", unique=True)
     await db.products.create_index("id", unique=True)
     await db.orders.create_index("id", unique=True)
     await db.orders.create_index("order_number", unique=True)
     await db.reviews.create_index("id", unique=True)
+    await db.vouchers.create_index("id", unique=True)
+    await db.vouchers.create_index("code", unique=True)
 
 # Include router & middleware
 app.include_router(api_router)

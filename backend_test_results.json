@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-03-31T00:42:09.111092",
-  "total_tests": 31,
-  "passed_tests": 30,
-  "success_rate": 96.7741935483871,
+  "timestamp": "2026-03-31T00:59:36.515049",
+  "total_tests": 50,
+  "passed_tests": 49,
+  "success_rate": 98.0,
   "results": [
     {
       "test": "Admin Login",
@@ -50,7 +50,7 @@
       "test": "Create Product",
       "status": "\u2705 PASS",
       "success": true,
-      "details": "Created product ID: 9f48ae22-dedb-404a-b171-34ced232957b",
+      "details": "Created product ID: 4d0e128e-c3db-47e9-9b9f-20990e4dd65c",
       "response_data": null
     },
     {
@@ -106,7 +106,7 @@
       "test": "Create Category",
       "status": "\u2705 PASS",
       "success": true,
-      "details": "Created category ID: eea69843-653f-45ec-8c2b-551ffe17ab0f",
+      "details": "Created category ID: cb85c579-91b1-4b7e-9a73-19d4eba28c67",
       "response_data": null
     },
     {
@@ -127,14 +127,14 @@
       "test": "Create Order",
       "status": "\u2705 PASS",
       "success": true,
-      "details": "Created order #932552 (ID: 7ce38997-1c45-4711-ad26-823f29574203)",
+      "details": "Created order #473425 (ID: c3e15bfc-0071-4a9c-878b-baacd541f9c3)",
       "response_data": null
     },
     {
       "test": "Track Order",
       "status": "\u2705 PASS",
       "success": true,
-      "details": "Tracked order #932552",
+      "details": "Tracked order #473425",
       "response_data": null
     },
     {
@@ -162,7 +162,7 @@
       "test": "Create Review",
       "status": "\u2705 PASS",
       "success": true,
-      "details": "Created review ID: d70ac50d-6f77-4c30-b2f9-a7078fec5cef",
+      "details": "Created review ID: 153370e6-45b7-4334-9cbe-674687c4ad4f",
       "response_data": null
     },
     {
@@ -184,6 +184,132 @@
       "status": "\u2705 PASS",
       "success": true,
       "details": "Approved review",
+      "response_data": null
+    },
+    {
+      "test": "Get Vouchers",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Retrieved 2 vouchers with all expected seeded vouchers",
+      "response_data": null
+    },
+    {
+      "test": "Voucher Structure",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "All required fields present",
+      "response_data": null
+    },
+    {
+      "test": "Create Voucher",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Created voucher ID: 8b82e498-0d40-4c85-9e7f-358cfd94b7df",
+      "response_data": null
+    },
+    {
+      "test": "Update Voucher",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Updated voucher",
+      "response_data": null
+    },
+    {
+      "test": "Validate Voucher - Valid",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "WELCOME10 with subtotal 1000 returns discount 100.0",
+      "response_data": null
+    },
+    {
+      "test": "Validate Voucher - Invalid",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Correctly rejected invalid voucher code",
+      "response_data": null
+    },
+    {
+      "test": "Validate Voucher - Min Order",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Correctly rejected voucher below minimum order",
+      "response_data": null
+    },
+    {
+      "test": "Analytics Structure",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "All required analytics fields present",
+      "response_data": null
+    },
+    {
+      "test": "Analytics total_orders Type",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "total_orders is numeric",
+      "response_data": null
+    },
+    {
+      "test": "Analytics total_revenue Type",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "total_revenue is numeric",
+      "response_data": null
+    },
+    {
+      "test": "Analytics avg_order_value Type",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "avg_order_value is numeric",
+      "response_data": null
+    },
+    {
+      "test": "Analytics paid_orders Type",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "paid_orders is numeric",
+      "response_data": null
+    },
+    {
+      "test": "Analytics pending_orders Type",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "pending_orders is numeric",
+      "response_data": null
+    },
+    {
+      "test": "Analytics total_products Type",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "total_products is numeric",
+      "response_data": null
+    },
+    {
+      "test": "Status Breakdown",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Status breakdown has 2 statuses",
+      "response_data": null
+    },
+    {
+      "test": "Payment Breakdown",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Payment breakdown has 1 methods",
+      "response_data": null
+    },
+    {
+      "test": "Top Products",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Top products list has 2 items",
+      "response_data": null
+    },
+    {
+      "test": "Revenue Chart",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Revenue chart has 1 data points",
       "response_data": null
     },
     {
@@ -219,6 +345,13 @@
       "status": "\u2705 PASS",
       "success": true,
       "details": "Deleted test category",
+      "response_data": null
+    },
+    {
+      "test": "Cleanup Voucher",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Deleted test voucher",
       "response_data": null
     }
   ]
