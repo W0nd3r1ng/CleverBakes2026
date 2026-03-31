@@ -14,6 +14,12 @@ export const createProduct = (data) => api.post('/products', data).then(r => r.d
 export const updateProduct = (id, data) => api.put(`/products/${id}`, data).then(r => r.data);
 export const deleteProduct = (id) => api.delete(`/products/${id}`).then(r => r.data);
 
+// Categories
+export const getCategories = () => api.get('/categories').then(r => r.data);
+export const createCategory = (data) => api.post('/categories', data).then(r => r.data);
+export const updateCategory = (id, data) => api.put(`/categories/${id}`, data).then(r => r.data);
+export const deleteCategory = (id) => api.delete(`/categories/${id}`).then(r => r.data);
+
 // Orders
 export const createOrder = (data) => api.post('/orders', data).then(r => r.data);
 export const trackOrder = (orderNumber) => api.get(`/orders/track/${orderNumber}`).then(r => r.data);

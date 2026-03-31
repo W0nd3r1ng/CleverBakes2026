@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-03-31T00:15:09.342507",
-  "total_tests": 21,
-  "passed_tests": 21,
+  "timestamp": "2026-03-31T00:26:51.326552",
+  "total_tests": 27,
+  "passed_tests": 27,
   "success_rate": 100.0,
   "results": [
     {
@@ -43,7 +43,7 @@
       "test": "Create Product",
       "status": "\u2705 PASS",
       "success": true,
-      "details": "Created product ID: 14784293-bb22-4e06-bb32-f48d25ed260f",
+      "details": "Created product ID: 47b769e7-8b76-40c4-8a9d-e1924815fa21",
       "response_data": null
     },
     {
@@ -61,24 +61,59 @@
       "response_data": null
     },
     {
+      "test": "Get Categories",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Retrieved 4 categories with all expected seeded categories",
+      "response_data": null
+    },
+    {
+      "test": "Category Structure",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "All required fields present",
+      "response_data": null
+    },
+    {
+      "test": "Create Category",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Created category ID: 4ae5dbc8-6e7d-4670-ad83-31eaa359bc6b",
+      "response_data": null
+    },
+    {
+      "test": "Update Category",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Updated category",
+      "response_data": null
+    },
+    {
+      "test": "Products Category Assignment",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "15 products have category assignments",
+      "response_data": null
+    },
+    {
       "test": "Create Order",
       "status": "\u2705 PASS",
       "success": true,
-      "details": "Created order #323083 (ID: 30269b31-c723-4d03-9fb0-a8d9d4fbdbeb)",
+      "details": "Created order #146703 (ID: 9bf0a796-13e6-4262-9b75-e7b725aa7f30)",
       "response_data": null
     },
     {
       "test": "Track Order",
       "status": "\u2705 PASS",
       "success": true,
-      "details": "Tracked order #323083",
+      "details": "Tracked order #146703",
       "response_data": null
     },
     {
       "test": "Get All Orders",
       "status": "\u2705 PASS",
       "success": true,
-      "details": "Retrieved 1 orders",
+      "details": "Retrieved 2 orders",
       "response_data": null
     },
     {
@@ -99,7 +134,7 @@
       "test": "Create Review",
       "status": "\u2705 PASS",
       "success": true,
-      "details": "Created review ID: 1a9e22db-72bd-4cbf-9fd8-e0d0c2713c4c",
+      "details": "Created review ID: d57b6193-101d-4f8a-a077-7099c4843ec4",
       "response_data": null
     },
     {
@@ -149,6 +184,13 @@
       "status": "\u2705 PASS",
       "success": true,
       "details": "Deleted test review",
+      "response_data": null
+    },
+    {
+      "test": "Cleanup Category",
+      "status": "\u2705 PASS",
+      "success": true,
+      "details": "Deleted test category",
       "response_data": null
     }
   ]

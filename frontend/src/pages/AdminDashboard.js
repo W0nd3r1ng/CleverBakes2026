@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, Star, LogOut, Plus, Trash2, Edit2, Eye, Check, X, ChefHat } from 'lucide-react';
-import { checkAuth, adminLogout, getProducts, createProduct, updateProduct, deleteProduct, getAllOrders, updateOrderStatus, updatePaymentStatus, deleteOrder, getReviews, toggleReview, deleteReview, uploadImage } from '../api';
+import { Package, ShoppingCart, Star, LogOut, Plus, Trash2, Edit2, Check, X, ChefHat, Tag, GripVertical } from 'lucide-react';
+import { checkAuth, adminLogout, getProducts, createProduct, updateProduct, deleteProduct, getAllOrders, updateOrderStatus, updatePaymentStatus, deleteOrder, getReviews, toggleReview, deleteReview, uploadImage, getCategories, createCategory, updateCategory, deleteCategory } from '../api';
 
 const TABS = [
   { id: 'products', label: 'Products', icon: Package },
+  { id: 'categories', label: 'Categories', icon: Tag },
   { id: 'orders', label: 'Orders', icon: ShoppingCart },
   { id: 'reviews', label: 'Reviews', icon: Star },
 ];
@@ -16,6 +17,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('products');
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [orders, setOrders] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,8 +29,9 @@ export default function AdminDashboard() {
 
   const loadData = useCallback(async () => {
     try {
-      const [pRes, oRes, rRes] = await Promise.all([getProducts(), getAllOrders(), getReviews(false)]);
+      const [pRes, cRes, oRes, rRes] = await Promise.all([getProducts(), getCategories(), getAllOrders(), getReviews(false)]);
       setProducts(pRes.data || []);
+      setCategories(cRes.data || []);
       setOrders(oRes.data || []);
       setReviews(rRes.data || []);
     } catch (e) {
@@ -83,6 +86,31 @@ export default function AdminDashboard() {
     } catch { showToast('Failed to delete'); }
   };
 
+  // Category handlers
+  const handleSaveCategory = async (data, editId) => {
+    try {
+      if (editId) {
+        await updateCategory(editId, data);
+        showToast('Category updated');
+      } else {
+        await createCategory(data);
+        showToast('Category created');
+      }
+      loadData();
+    } catch (e) {
+      showToast('Error: ' + (e.response?.data?.detail || e.message));
+    }
+  };
+
+  const handleDeleteCategory = async (id) => {
+    if (!window.confirm('Delete this category? Products in it will become uncategorized.')) return;
+    try {
+      await deleteCategory(id);
+      showToast('Category deleted');
+      loadData();
+    } catch { showToast('Failed to delete'); }
+  };
+
   // Order handlers
   const handleOrderStatus = async (id, status) => {
     try {
@@ -127,6 +155,11 @@ export default function AdminDashboard() {
     } catch { showToast('Failed to delete'); }
   };
 
+  const getCategoryName = (catId) => {
+    const cat = categories.find(c => c.id === catId);
+    return cat ? cat.name : '—';
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-cream flex items-center justify-center">
@@ -137,8 +170,8 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-cream" data-testid="admin-dashboard">
-      {/* Sidebar */}
       <div className="flex">
+        {/* Sidebar */}
         <aside className="w-60 min-h-screen bg-white border-r border-soft-border p-6 flex flex-col" data-testid="admin-sidebar">
           <div className="flex items-center gap-3 mb-8">
             <div className="w-10 h-10 bg-burnt-orange/10 rounded-full flex items-center justify-center">
@@ -163,7 +196,7 @@ export default function AdminDashboard() {
                 <tab.icon size={18} />
                 {tab.label}
                 <span className="ml-auto text-xs bg-warm-sand rounded-full px-2 py-0.5">
-                  {tab.id === 'products' ? products.length : tab.id === 'orders' ? orders.length : reviews.length}
+                  {tab.id === 'products' ? products.length : tab.id === 'categories' ? categories.length : tab.id === 'orders' ? orders.length : reviews.length}
                 </span>
               </button>
             ))}
@@ -183,9 +216,19 @@ export default function AdminDashboard() {
           {activeTab === 'products' && (
             <ProductsTab
               products={products}
+              categories={categories}
+              getCategoryName={getCategoryName}
               onAdd={() => { setEditProduct(null); setShowModal(true); }}
               onEdit={(p) => { setEditProduct(p); setShowModal(true); }}
               onDelete={handleDeleteProduct}
+            />
+          )}
+          {activeTab === 'categories' && (
+            <CategoriesTab
+              categories={categories}
+              products={products}
+              onSave={handleSaveCategory}
+              onDelete={handleDeleteCategory}
             />
           )}
           {activeTab === 'orders' && (
@@ -210,6 +253,7 @@ export default function AdminDashboard() {
       {showModal && (
         <ProductModal
           product={editProduct}
+          categories={categories}
           onSave={handleSaveProduct}
           onClose={() => { setShowModal(false); setEditProduct(null); }}
         />
@@ -225,8 +269,153 @@ export default function AdminDashboard() {
   );
 }
 
+// ─── Categories Tab ───
+function CategoriesTab({ categories, products, onSave, onDelete }) {
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ name: '', description: '', sort_order: 0 });
+  const [showForm, setShowForm] = useState(false);
+
+  const startEdit = (cat) => {
+    setEditing(cat.id);
+    setForm({ name: cat.name, description: cat.description || '', sort_order: cat.sort_order || 0 });
+    setShowForm(true);
+  };
+
+  const startNew = () => {
+    setEditing(null);
+    setForm({ name: '', description: '', sort_order: categories.length });
+    setShowForm(true);
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    onSave({ name: form.name.trim(), description: form.description.trim(), sort_order: parseInt(form.sort_order) || 0 }, editing);
+    setShowForm(false);
+    setEditing(null);
+    setForm({ name: '', description: '', sort_order: 0 });
+  };
+
+  const getProductCount = (catId) => products.filter(p => p.category_id === catId).length;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="font-heading text-2xl font-semibold text-bark">Categories</h2>
+        <button onClick={startNew} className="flex items-center gap-2 px-4 py-2.5 bg-burnt-orange text-white rounded-xl text-sm font-semibold hover:bg-burnt-orange-dark transition-all" data-testid="add-category-button">
+          <Plus size={16} /> Add Category
+        </button>
+      </div>
+
+      {/* Add/Edit Form */}
+      {showForm && (
+        <div className="bg-white rounded-2xl border border-soft-border p-6 mb-6" data-testid="category-form">
+          <h3 className="font-heading text-lg font-semibold text-bark mb-4">{editing ? 'Edit Category' : 'New Category'}</h3>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-bark mb-1">Name <span className="text-red-400">*</span></label>
+                <input
+                  value={form.name}
+                  onChange={e => setForm(f => ({...f, name: e.target.value}))}
+                  required
+                  placeholder="e.g. Cakes"
+                  className="w-full px-4 py-2.5 rounded-xl border border-soft-border bg-cream/30 text-bark focus:outline-none focus:ring-2 focus:ring-burnt-orange/30"
+                  data-testid="category-name-input"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-bark mb-1">Description</label>
+                <input
+                  value={form.description}
+                  onChange={e => setForm(f => ({...f, description: e.target.value}))}
+                  placeholder="Short description"
+                  className="w-full px-4 py-2.5 rounded-xl border border-soft-border bg-cream/30 text-bark focus:outline-none focus:ring-2 focus:ring-burnt-orange/30"
+                  data-testid="category-desc-input"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-bark mb-1">Sort Order</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.sort_order}
+                  onChange={e => setForm(f => ({...f, sort_order: e.target.value}))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-soft-border bg-cream/30 text-bark focus:outline-none focus:ring-2 focus:ring-burnt-orange/30"
+                  data-testid="category-sort-input"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button type="submit" className="px-5 py-2.5 bg-burnt-orange text-white rounded-xl text-sm font-semibold hover:bg-burnt-orange-dark transition-all" data-testid="save-category-button">
+                {editing ? 'Update' : 'Create'} Category
+              </button>
+              <button type="button" onClick={() => { setShowForm(false); setEditing(null); }} className="px-5 py-2.5 bg-warm-sand text-bark rounded-xl text-sm font-semibold hover:bg-soft-border transition-all" data-testid="cancel-category-button">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Categories List */}
+      <div className="bg-white rounded-2xl border border-soft-border overflow-hidden">
+        <table className="w-full" data-testid="categories-table">
+          <thead>
+            <tr className="border-b border-soft-border">
+              <th className="text-left px-5 py-3 text-xs text-mocha uppercase tracking-wider">Order</th>
+              <th className="text-left px-5 py-3 text-xs text-mocha uppercase tracking-wider">Category</th>
+              <th className="text-left px-5 py-3 text-xs text-mocha uppercase tracking-wider">Description</th>
+              <th className="text-left px-5 py-3 text-xs text-mocha uppercase tracking-wider">Products</th>
+              <th className="text-right px-5 py-3 text-xs text-mocha uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {categories.map(cat => (
+              <tr key={cat.id} className="border-b border-soft-border/50 hover:bg-warm-sand/30 transition-colors">
+                <td className="px-5 py-3">
+                  <div className="flex items-center gap-2 text-mocha">
+                    <GripVertical size={14} />
+                    <span className="text-sm font-mono">{cat.sort_order}</span>
+                  </div>
+                </td>
+                <td className="px-5 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-burnt-orange/10 rounded-lg flex items-center justify-center">
+                      <Tag className="text-burnt-orange" size={14} />
+                    </div>
+                    <span className="font-medium text-bark text-sm">{cat.name}</span>
+                  </div>
+                </td>
+                <td className="px-5 py-3 text-sm text-mocha">{cat.description || '—'}</td>
+                <td className="px-5 py-3">
+                  <span className="text-sm font-semibold text-burnt-orange">{getProductCount(cat.id)}</span>
+                  <span className="text-xs text-mocha ml-1">items</span>
+                </td>
+                <td className="px-5 py-3">
+                  <div className="flex justify-end gap-2">
+                    <button onClick={() => startEdit(cat)} className="p-1.5 text-mocha hover:text-burnt-orange transition-colors" data-testid={`edit-category-${cat.id}`}>
+                      <Edit2 size={15} />
+                    </button>
+                    <button onClick={() => onDelete(cat.id)} className="p-1.5 text-mocha hover:text-red-500 transition-colors" data-testid={`delete-category-${cat.id}`}>
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {categories.length === 0 && (
+              <tr><td colSpan={5} className="px-5 py-8 text-center text-mocha">No categories yet. Click "Add Category" to create one.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Products Tab ───
-function ProductsTab({ products, onAdd, onEdit, onDelete }) {
+function ProductsTab({ products, categories, getCategoryName, onAdd, onEdit, onDelete }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -240,6 +429,7 @@ function ProductsTab({ products, onAdd, onEdit, onDelete }) {
           <thead>
             <tr className="border-b border-soft-border">
               <th className="text-left px-5 py-3 text-xs text-mocha uppercase tracking-wider">Product</th>
+              <th className="text-left px-5 py-3 text-xs text-mocha uppercase tracking-wider">Category</th>
               <th className="text-left px-5 py-3 text-xs text-mocha uppercase tracking-wider">Price</th>
               <th className="text-left px-5 py-3 text-xs text-mocha uppercase tracking-wider">Variations</th>
               <th className="text-left px-5 py-3 text-xs text-mocha uppercase tracking-wider">Sizes</th>
@@ -257,6 +447,11 @@ function ProductsTab({ products, onAdd, onEdit, onDelete }) {
                       <p className="text-xs text-mocha truncate max-w-[200px]">{p.description}</p>
                     </div>
                   </div>
+                </td>
+                <td className="px-5 py-3">
+                  <span className={`text-xs font-semibold px-2 py-1 rounded-full ${p.category_id ? 'bg-burnt-orange/10 text-burnt-orange' : 'bg-warm-sand text-mocha'}`}>
+                    {getCategoryName(p.category_id)}
+                  </span>
                 </td>
                 <td className="px-5 py-3 text-sm font-semibold text-burnt-orange">&#8369;{p.price}</td>
                 <td className="px-5 py-3 text-xs text-mocha">{(p.variations || []).join(', ') || '—'}</td>
@@ -408,7 +603,7 @@ function ReviewsTab({ reviews, onToggle, onDelete }) {
 }
 
 // ─── Product Modal ───
-function ProductModal({ product, onSave, onClose }) {
+function ProductModal({ product, categories, onSave, onClose }) {
   const [form, setForm] = useState({
     name: product?.name || '',
     description: product?.description || '',
@@ -416,6 +611,7 @@ function ProductModal({ product, onSave, onClose }) {
     image: product?.image || '',
     variations: (product?.variations || []).join(', '),
     sizes: (product?.sizes || []).join(', '),
+    category_id: product?.category_id || '',
   });
   const [uploading, setUploading] = useState(false);
 
@@ -439,6 +635,7 @@ function ProductModal({ product, onSave, onClose }) {
       image: form.image,
       variations: form.variations.split(',').map(v => v.trim()).filter(Boolean),
       sizes: form.sizes.split(',').map(s => s.trim()).filter(Boolean),
+      category_id: form.category_id,
     });
   };
 
@@ -447,12 +644,26 @@ function ProductModal({ product, onSave, onClose }) {
       <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-6">
           <h3 className="font-heading text-xl font-semibold text-bark">{product ? 'Edit Product' : 'Add Product'}</h3>
-          <button onClick={onClose} className="text-mocha hover:text-bark" data-testid="close-product-modal">&times;</button>
+          <button onClick={onClose} className="text-mocha hover:text-bark text-xl" data-testid="close-product-modal">&times;</button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-bark mb-1">Name</label>
             <input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} required className="w-full px-4 py-2.5 rounded-xl border border-soft-border bg-cream/30 text-bark focus:outline-none focus:ring-2 focus:ring-burnt-orange/30" data-testid="product-name-input" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-bark mb-1">Category</label>
+            <select
+              value={form.category_id}
+              onChange={e => setForm(f => ({...f, category_id: e.target.value}))}
+              className="w-full px-4 py-2.5 rounded-xl border border-soft-border bg-cream/30 text-bark focus:outline-none focus:ring-2 focus:ring-burnt-orange/30"
+              data-testid="product-category-select"
+            >
+              <option value="">— No Category —</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-bark mb-1">Price (PHP)</label>

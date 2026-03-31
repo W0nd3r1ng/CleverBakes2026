@@ -1,8 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
+import { getCategories } from '../../api';
 
 export default function Menu({ products, loading, onOrder }) {
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [activeCategory, setActiveCategory] = useState('all');
+
+  useEffect(() => {
+    getCategories().then(res => setCategories(res.data || [])).catch(() => {});
+  }, []);
+
+  const filteredProducts = useMemo(() => {
+    if (activeCategory === 'all') return products;
+    return products.filter(p => p.category_id === activeCategory);
+  }, [products, activeCategory]);
 
   if (loading) {
     return (
@@ -18,55 +30,101 @@ export default function Menu({ products, loading, onOrder }) {
     <>
       <section id="menu" className="py-20 px-4 bg-cream" data-testid="menu-section">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-14">
+          <div className="text-center mb-10">
             <p className="text-sm text-burnt-orange uppercase tracking-[0.15em] font-semibold mb-3">Our Treats</p>
             <h2 className="font-heading text-3xl sm:text-4xl font-semibold text-bark tracking-tight">Our Menu</h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {products.map((product, idx) => (
-              <div
-                key={product.id || idx}
-                className="bg-white rounded-2xl overflow-hidden border border-soft-border hover:shadow-lg hover:-translate-y-1 transition-all duration-300 group"
-                data-testid={`product-card-${product.id || idx}`}
+          {/* Category Filter Tabs */}
+          {categories.length > 0 && (
+            <div className="flex flex-wrap justify-center gap-2 mb-10" data-testid="category-filters">
+              <button
+                onClick={() => setActiveCategory('all')}
+                className={`px-5 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${
+                  activeCategory === 'all'
+                    ? 'bg-burnt-orange text-white shadow-md'
+                    : 'bg-white text-bark-light border border-soft-border hover:border-burnt-orange/40 hover:text-burnt-orange'
+                }`}
+                data-testid="category-filter-all"
               >
-                <div className="relative h-48 overflow-hidden cursor-pointer" onClick={() => setSelectedProduct(product)}>
-                  <img
-                    src={product.image || '/images/logo.jpg'}
-                    alt={product.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    loading="lazy"
-                  />
-                </div>
-                <div className="p-5">
-                  <h3 className="font-heading font-semibold text-bark mb-1">{product.name}</h3>
-                  <p className="text-sm text-mocha mb-3 line-clamp-2">{product.description}</p>
+                All
+              </button>
+              {categories.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategory(cat.id)}
+                  className={`px-5 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${
+                    activeCategory === cat.id
+                      ? 'bg-burnt-orange text-white shadow-md'
+                      : 'bg-white text-bark-light border border-soft-border hover:border-burnt-orange/40 hover:text-burnt-orange'
+                  }`}
+                  data-testid={`category-filter-${cat.id}`}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          )}
 
-                  {((product.variations && product.variations.length > 0) || (product.sizes && product.sizes.length > 0)) && (
-                    <div className="flex flex-wrap gap-1.5 mb-3">
-                      {(product.variations || []).filter(v => v && v !== '0').map(v => (
-                        <span key={v} className="text-xs bg-ube/10 text-ube px-2 py-0.5 rounded-full">{v}</span>
-                      ))}
-                      {(product.sizes || []).filter(s => s && s !== '0').map(s => (
-                        <span key={s} className="text-xs bg-warm-sand text-bark-light px-2 py-0.5 rounded-full">{s}</span>
-                      ))}
+          {filteredProducts.length === 0 ? (
+            <div className="text-center py-16 text-mocha">
+              <p className="text-lg">No products in this category yet.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {filteredProducts.map((product, idx) => (
+                <div
+                  key={product.id || idx}
+                  className="bg-white rounded-2xl overflow-hidden border border-soft-border hover:shadow-lg hover:-translate-y-1 transition-all duration-300 group"
+                  data-testid={`product-card-${product.id || idx}`}
+                >
+                  <div className="relative h-48 overflow-hidden cursor-pointer" onClick={() => setSelectedProduct(product)}>
+                    <img
+                      src={product.image || '/images/logo.jpg'}
+                      alt={product.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      loading="lazy"
+                    />
+                    {/* Category badge */}
+                    {product.category_id && categories.length > 0 && (() => {
+                      const cat = categories.find(c => c.id === product.category_id);
+                      return cat ? (
+                        <span className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm text-bark text-xs font-semibold px-2.5 py-1 rounded-full shadow-sm">
+                          {cat.name}
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
+                  <div className="p-5">
+                    <h3 className="font-heading font-semibold text-bark mb-1">{product.name}</h3>
+                    <p className="text-sm text-mocha mb-3 line-clamp-2">{product.description}</p>
+
+                    {((product.variations && product.variations.length > 0) || (product.sizes && product.sizes.length > 0)) && (
+                      <div className="flex flex-wrap gap-1.5 mb-3">
+                        {(product.variations || []).filter(v => v && v !== '0').map(v => (
+                          <span key={v} className="text-xs bg-ube/10 text-ube px-2 py-0.5 rounded-full">{v}</span>
+                        ))}
+                        {(product.sizes || []).filter(s => s && s !== '0').map(s => (
+                          <span key={s} className="text-xs bg-warm-sand text-bark-light px-2 py-0.5 rounded-full">{s}</span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-lg font-bold text-burnt-orange">&#8369;{product.price}</span>
+                      <button
+                        onClick={() => onOrder(product)}
+                        className="px-4 py-2 bg-burnt-orange/10 text-burnt-orange rounded-full text-sm font-semibold hover:bg-burnt-orange hover:text-white transition-all duration-300"
+                        data-testid={`order-button-${product.id || idx}`}
+                      >
+                        Order Now
+                      </button>
                     </div>
-                  )}
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-lg font-bold text-burnt-orange">&#8369;{product.price}</span>
-                    <button
-                      onClick={() => onOrder(product)}
-                      className="px-4 py-2 bg-burnt-orange/10 text-burnt-orange rounded-full text-sm font-semibold hover:bg-burnt-orange hover:text-white transition-all duration-300"
-                      data-testid={`order-button-${product.id || idx}`}
-                    >
-                      Order Now
-                    </button>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

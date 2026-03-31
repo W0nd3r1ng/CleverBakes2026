@@ -86,6 +86,16 @@ class AdminLogin(BaseModel):
     username: str
     password: str
 
+class CategoryCreate(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    sort_order: Optional[int] = 0
+
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    sort_order: Optional[int] = None
+
 class ProductCreate(BaseModel):
     name: str
     description: Optional[str] = ""
@@ -93,6 +103,7 @@ class ProductCreate(BaseModel):
     image: Optional[str] = ""
     variations: Optional[List[str]] = []
     sizes: Optional[List[str]] = []
+    category_id: Optional[str] = ""
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
@@ -101,6 +112,7 @@ class ProductUpdate(BaseModel):
     image: Optional[str] = None
     variations: Optional[List[str]] = None
     sizes: Optional[List[str]] = None
+    category_id: Optional[str] = None
 
 class OrderCreate(BaseModel):
     product_name: str
@@ -152,6 +164,53 @@ async def auth_me(request: Request):
     admin = await get_current_admin(request)
     return {"success": True, "user": {"username": "admin", "role": admin["role"]}}
 
+# ─── Categories ───
+
+@api_router.get("/categories")
+async def get_categories():
+    categories = await db.categories.find({}, {"_id": 0}).sort("sort_order", 1).to_list(100)
+    return {"success": True, "data": categories}
+
+@api_router.post("/categories")
+async def create_category(data: CategoryCreate, request: Request):
+    await get_current_admin(request)
+    category = {
+        "id": str(uuid.uuid4()),
+        "name": data.name,
+        "description": data.description or "",
+        "sort_order": data.sort_order or 0,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.categories.insert_one(category)
+    category.pop("_id", None)
+    return {"success": True, "data": category}
+
+@api_router.put("/categories/{category_id}")
+async def update_category(category_id: str, data: CategoryUpdate, request: Request):
+    await get_current_admin(request)
+    update = {}
+    for field in ["name", "description", "sort_order"]:
+        val = getattr(data, field)
+        if val is not None:
+            update[field] = val
+    if not update:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    result = await db.categories.update_one({"id": category_id}, {"$set": update})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Category not found")
+    category = await db.categories.find_one({"id": category_id}, {"_id": 0})
+    return {"success": True, "data": category}
+
+@api_router.delete("/categories/{category_id}")
+async def delete_category(category_id: str, request: Request):
+    await get_current_admin(request)
+    result = await db.categories.delete_one({"id": category_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Category not found")
+    # Unset category_id from products that had this category
+    await db.products.update_many({"category_id": category_id}, {"$set": {"category_id": ""}})
+    return {"success": True, "message": "Category deleted"}
+
 # ─── Products ───
 
 @api_router.get("/products")
@@ -177,6 +236,7 @@ async def create_product(data: ProductCreate, request: Request):
         "image": data.image or "",
         "variations": data.variations or [],
         "sizes": data.sizes or [],
+        "category_id": data.category_id or "",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -188,7 +248,7 @@ async def create_product(data: ProductCreate, request: Request):
 async def update_product(product_id: str, data: ProductUpdate, request: Request):
     await get_current_admin(request)
     update = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    for field in ["name", "description", "price", "image", "variations", "sizes"]:
+    for field in ["name", "description", "price", "image", "variations", "sizes", "category_id"]:
         val = getattr(data, field)
         if val is not None:
             update[field] = val
@@ -337,6 +397,31 @@ async def upload_image(file: UploadFile = File(...)):
 
 # ─── Seed Data ───
 
+SEED_CATEGORIES = [
+    {"name": "Cakes", "description": "Custom and specialty cakes", "sort_order": 1},
+    {"name": "Cookies", "description": "Freshly baked cookies and treats", "sort_order": 2},
+    {"name": "Breads & Pastries", "description": "Bread, muffins, rolls and pastries", "sort_order": 3},
+    {"name": "Brownies", "description": "Rich chocolate brownies", "sort_order": 4},
+]
+
+SEED_PRODUCT_CATEGORIES = {
+    "Banana Muffins": "Breads & Pastries",
+    "Banana Bread": "Breads & Pastries",
+    "Cinnamon Rolls": "Breads & Pastries",
+    "Custom Bento Cake": "Cakes",
+    "Custom Letter Cake": "Cakes",
+    "Customize Cake": "Cakes",
+    "Double Chocolate Brownies": "Brownies",
+    "Flower Cake": "Cakes",
+    "Money Cake": "Cakes",
+    "Number Cake": "Cakes",
+    "Oreo Cookies": "Cookies",
+    "Sansrival Cake": "Cakes",
+    "S'mores Cookies": "Cookies",
+    "Ube Cake": "Cakes",
+    "Ube Cheesecake": "Cakes",
+}
+
 SEED_PRODUCTS = [
     {"name": "Banana Muffins", "image": "/images/banana muffins.jpg", "description": "Moist and fluffy muffins with fresh bananas", "price": 250, "variations": [], "sizes": []},
     {"name": "Banana Bread", "image": "/images/banna bread.jpg", "description": "Classic homemade banana bread, perfectly sweet", "price": 350, "variations": [], "sizes": []},
@@ -357,10 +442,34 @@ SEED_PRODUCTS = [
 
 @app.on_event("startup")
 async def seed_data():
+    # Seed categories
+    cat_count = await db.categories.count_documents({})
+    category_map = {}
+    if cat_count == 0:
+        logger.info("Seeding categories...")
+        for c in SEED_CATEGORIES:
+            cat = {
+                "id": str(uuid.uuid4()),
+                "name": c["name"],
+                "description": c["description"],
+                "sort_order": c["sort_order"],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.categories.insert_one(cat)
+            category_map[c["name"]] = cat["id"]
+        logger.info(f"Seeded {len(SEED_CATEGORIES)} categories")
+    else:
+        # Build map from existing
+        cats = await db.categories.find({}, {"_id": 0}).to_list(100)
+        for c in cats:
+            category_map[c["name"]] = c["id"]
+
+    # Seed products
     count = await db.products.count_documents({})
     if count == 0:
         logger.info("Seeding products...")
         for p in SEED_PRODUCTS:
+            cat_name = SEED_PRODUCT_CATEGORIES.get(p["name"], "")
             product = {
                 "id": str(uuid.uuid4()),
                 "name": p["name"],
@@ -369,6 +478,7 @@ async def seed_data():
                 "image": p["image"],
                 "variations": p["variations"],
                 "sizes": p["sizes"],
+                "category_id": category_map.get(cat_name, ""),
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -397,6 +507,7 @@ async def seed_data():
         logger.info("Seeded sample reviews")
     
     # Create indexes
+    await db.categories.create_index("id", unique=True)
     await db.products.create_index("id", unique=True)
     await db.orders.create_index("id", unique=True)
     await db.orders.create_index("order_number", unique=True)

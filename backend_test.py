@@ -31,9 +31,15 @@ class CleverBakesAPITester:
         }
         self.test_order = None
         self.test_review = None
+        self.test_category = {
+            "name": "Test Category",
+            "description": "A test category for API testing",
+            "sort_order": 99
+        }
         self.created_product_id = None
         self.created_order_id = None
         self.created_review_id = None
+        self.created_category_id = None
 
     def log_test(self, name: str, success: bool, details: str = "", response_data: Any = None):
         """Log test result"""
@@ -251,6 +257,62 @@ class CleverBakesAPITester:
         
         return True
 
+    def test_categories_api(self) -> bool:
+        """Test categories CRUD operations"""
+        print("\n🏷️ Testing Categories API...")
+        
+        # Test GET /categories (should return seeded categories)
+        success, response = self.make_request('GET', '/categories')
+        if not success or not response.get('success'):
+            return self.log_test("Get Categories", False, f"Failed to get categories: {response}")
+        
+        categories = response.get('data', [])
+        expected_categories = ["Cakes", "Cookies", "Breads & Pastries", "Brownies"]
+        if len(categories) < 4:
+            self.log_test("Get Categories", False, f"Expected 4+ seeded categories, got {len(categories)}")
+        else:
+            category_names = [cat.get('name', '') for cat in categories]
+            missing_categories = [cat for cat in expected_categories if cat not in category_names]
+            if missing_categories:
+                self.log_test("Get Categories", False, f"Missing seeded categories: {missing_categories}")
+            else:
+                self.log_test("Get Categories", True, f"Retrieved {len(categories)} categories with all expected seeded categories")
+        
+        # Test category structure
+        if categories:
+            category = categories[0]
+            required_fields = ['id', 'name', 'sort_order']
+            missing_fields = [f for f in required_fields if f not in category]
+            if missing_fields:
+                self.log_test("Category Structure", False, f"Missing fields: {missing_fields}")
+            else:
+                self.log_test("Category Structure", True, "All required fields present")
+        
+        # Test CREATE category (requires auth)
+        success, response = self.make_request('POST', '/categories', self.test_category, 200, use_auth=True)
+        if success and response.get('success'):
+            self.created_category_id = response['data']['id']
+            self.log_test("Create Category", True, f"Created category ID: {self.created_category_id}")
+        else:
+            return self.log_test("Create Category", False, f"Failed to create category: {response}")
+        
+        # Test UPDATE category (requires auth)
+        update_data = {"name": "Updated Test Category", "description": "Updated description"}
+        success, response = self.make_request('PUT', f'/categories/{self.created_category_id}', update_data, 200, use_auth=True)
+        self.log_test("Update Category", success and response.get('success'), f"Updated category")
+        
+        # Test that products have category_id field
+        success, response = self.make_request('GET', '/products')
+        if success and response.get('success'):
+            products = response.get('data', [])
+            products_with_categories = [p for p in products if p.get('category_id')]
+            if len(products_with_categories) >= 10:  # Most products should have categories
+                self.log_test("Products Category Assignment", True, f"{len(products_with_categories)} products have category assignments")
+            else:
+                self.log_test("Products Category Assignment", False, f"Only {len(products_with_categories)} products have category assignments")
+        
+        return True
+
     def test_image_upload(self) -> bool:
         """Test image upload functionality"""
         print("\n🖼️ Testing Image Upload...")
@@ -293,6 +355,11 @@ class CleverBakesAPITester:
         if self.created_review_id:
             success, response = self.make_request('DELETE', f'/reviews/{self.created_review_id}', use_auth=True)
             self.log_test("Cleanup Review", success, f"Deleted test review")
+        
+        # Delete test category
+        if self.created_category_id:
+            success, response = self.make_request('DELETE', f'/categories/{self.created_category_id}', use_auth=True)
+            self.log_test("Cleanup Category", success, f"Deleted test category")
 
     def run_all_tests(self) -> bool:
         """Run complete test suite"""
@@ -310,6 +377,7 @@ class CleverBakesAPITester:
             
             # API tests
             self.test_products_api()
+            self.test_categories_api()
             self.test_orders_api()
             self.test_reviews_api()
             self.test_image_upload()
