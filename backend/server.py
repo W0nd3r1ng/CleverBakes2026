@@ -27,6 +27,7 @@ db = client[os.environ['DB_NAME']]
 # JWT config
 JWT_SECRET = os.environ.get("JWT_SECRET", "cleverbakes-jwt-secret-2025-bakery")
 JWT_ALGORITHM = "HS256"
+IS_PRODUCTION = os.environ.get("RENDER") == "true" or os.environ.get("ENVIRONMENT") == "production"
 
 # Admin credentials
 ADMIN_USERNAME = "admin"
@@ -170,14 +171,24 @@ async def admin_login(data: AdminLogin, response: Response):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_token("admin", "admin")
     response.set_cookie(
-        key="access_token", value=token, httponly=True,
-        secure=False, samesite="lax", max_age=86400, path="/"
+        key="access_token",
+        value=token,
+        httponly=True,
+        secure=IS_PRODUCTION,
+        samesite="none" if IS_PRODUCTION else "lax",
+        max_age=86400,
+        path="/",
     )
     return {"success": True, "token": token, "user": {"username": "admin", "role": "admin"}}
 
 @api_router.post("/auth/logout")
 async def admin_logout(response: Response):
-    response.delete_cookie("access_token", path="/")
+    response.delete_cookie(
+        "access_token",
+        path="/",
+        secure=IS_PRODUCTION,
+        samesite="none" if IS_PRODUCTION else "lax",
+    )
     return {"success": True}
 
 @api_router.get("/auth/me")
@@ -752,10 +763,17 @@ async def seed_data():
 # Include router & middleware
 app.include_router(api_router)
 
+def get_cors_origins():
+    raw = os.environ.get("CORS_ORIGINS", "http://localhost:3000,https://cleverbakes.onrender.com")
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    if not origins or origins == ["*"]:
+        origins = ["http://localhost:3000", "https://cleverbakes.onrender.com"]
+    return origins
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=get_cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -8,6 +8,24 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('adminToken');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('adminToken');
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Products
 export const getProducts = () => api.get('/products').then(r => r.data);
 export const createProduct = (data) => api.post('/products', data).then(r => r.data);

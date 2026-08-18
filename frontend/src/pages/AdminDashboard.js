@@ -51,7 +51,20 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const verifyAuth = async () => {
-      try { await checkAuth(); loadData(); } catch { navigate('/admin/login'); }
+      const token = localStorage.getItem('adminToken');
+      if (!token) {
+        navigate('/admin/login');
+        return;
+      }
+      try {
+        await checkAuth();
+        await loadData();
+      } catch (err) {
+        if (err.response?.status === 401) {
+          localStorage.removeItem('adminToken');
+        }
+        navigate('/admin/login');
+      }
     };
     verifyAuth();
   }, [navigate, loadData]);
