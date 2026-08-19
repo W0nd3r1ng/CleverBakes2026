@@ -19,7 +19,8 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const url = error.config?.url || '';
+    if (error.response?.status === 401 && !url.includes('/auth/login')) {
       localStorage.removeItem('adminToken');
     }
     return Promise.reject(error);
@@ -44,6 +45,7 @@ export const createOrder = (data) => api.post('/orders', data).then(r => r.data)
 export const trackOrder = (orderNumber) => api.get(`/orders/track/${orderNumber}`).then(r => r.data);
 export const getAllOrders = () => api.get('/orders').then(r => r.data);
 export const updateOrderStatus = (id, status) => api.put(`/orders/${id}/status`, { status }).then(r => r.data);
+export const batchUpdateOrderStatus = (order_ids, status) => api.put('/orders/batch-status', { order_ids, status }).then(r => r.data);
 export const updatePaymentStatus = (id, status) => api.put(`/orders/${id}/payment`, { payment_status: status }).then(r => r.data);
 export const deleteOrder = (id) => api.delete(`/orders/${id}`).then(r => r.data);
 
@@ -57,6 +59,12 @@ export const deleteReview = (id) => api.delete(`/reviews/${id}`).then(r => r.dat
 export const adminLogin = (username, password) => api.post('/auth/login', { username, password }).then(r => r.data);
 export const adminLogout = () => api.post('/auth/logout').then(r => r.data);
 export const checkAuth = () => api.get('/auth/me').then(r => r.data);
+export const changeOwnPassword = (currentPassword, newPassword) => api.put('/auth/password', { current_password: currentPassword, new_password: newPassword }).then(r => r.data);
+export const getAdmins = () => api.get('/admins').then(r => r.data);
+export const createAdmin = (data) => api.post('/admins', data).then(r => r.data);
+export const updateAdmin = (id, data) => api.put(`/admins/${id}`, data).then(r => r.data);
+export const setAdminPassword = (id, newPassword) => api.put(`/admins/${id}/password`, { new_password: newPassword }).then(r => r.data);
+export const deleteAdmin = (id) => api.delete(`/admins/${id}`).then(r => r.data);
 
 // Vouchers
 export const getVouchers = () => api.get('/vouchers').then(r => r.data);
@@ -66,7 +74,12 @@ export const deleteVoucher = (id) => api.delete(`/vouchers/${id}`).then(r => r.d
 export const validateVoucher = (code, subtotal) => api.post('/vouchers/validate', { code, subtotal }).then(r => r.data);
 
 // Analytics
-export const getAnalytics = () => api.get('/analytics').then(r => r.data);
+export const getAnalytics = (year, month) => {
+  const params = {};
+  if (year) params.year = year;
+  if (month) params.month = month;
+  return api.get('/analytics', { params }).then(r => r.data);
+};
 
 // Upload
 export const uploadImage = (file) => {

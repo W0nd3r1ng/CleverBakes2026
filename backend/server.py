@@ -16,6 +16,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import random
 import string
+import re
 
 ROOT_DIR = Path(__file__).parent
 
@@ -29,9 +30,8 @@ JWT_SECRET = os.environ.get("JWT_SECRET", "cleverbakes-jwt-secret-2025-bakery")
 JWT_ALGORITHM = "HS256"
 IS_PRODUCTION = os.environ.get("RENDER") == "true" or os.environ.get("ENVIRONMENT") == "production"
 
-# Admin credentials
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "cleverbakes2025"
+DEFAULT_ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@cleverbakes.com").strip().lower()
+DEFAULT_ADMIN_PASSWORD = os.environ.get("ADMIN_INITIAL_PASSWORD", "CleverBakes#Admin2026!")
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -47,13 +47,34 @@ def hash_password(password: str) -> str:
 def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
-def create_token(user_id: str, role: str) -> str:
+def create_token(user_id: str, role: str, email: str = "") -> str:
     payload = {
         "sub": user_id,
         "role": role,
+        "email": email,
         "exp": datetime.now(timezone.utc) + timedelta(hours=24),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+def validate_password_strength(password: str):
+    if not password or len(password) < 10:
+        raise HTTPException(status_code=400, detail="Password must be at least 10 characters")
+    if not re.search(r"[A-Z]", password):
+        raise HTTPException(status_code=400, detail="Password must include an uppercase letter")
+    if not re.search(r"[a-z]", password):
+        raise HTTPException(status_code=400, detail="Password must include a lowercase letter")
+    if not re.search(r"\d", password):
+        raise HTTPException(status_code=400, detail="Password must include a number")
+    if not re.search(r"[^A-Za-z0-9]", password):
+        raise HTTPException(status_code=400, detail="Password must include a special character")
+
+def sanitize_admin(doc):
+    if not doc:
+        return None
+    out = dict(doc)
+    out.pop("password_hash", None)
+    out.pop("_id", None)
+    return out
 
 async def get_current_admin(request: Request):
     token = request.cookies.get("access_token")
@@ -67,7 +88,12 @@ async def get_current_admin(request: Request):
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         if payload.get("role") != "admin":
             raise HTTPException(status_code=403, detail="Admin access required")
-        return payload
+        user = await db.admins.find_one({"id": payload.get("sub")}, {"_id": 0})
+        if not user or not user.get("is_active", True):
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        return user
+    except HTTPException:
+        raise
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
@@ -130,12 +156,34 @@ class OrderCreate(BaseModel):
     payment_method: str = "COD"
     gcash_proof: Optional[str] = ""
     voucher_code: Optional[str] = ""
+    special_instructions: Optional[str] = ""
 
 class OrderStatusUpdate(BaseModel):
     status: str
 
+class OrderBatchStatusUpdate(BaseModel):
+    order_ids: List[str]
+    status: str
+
 class PaymentStatusUpdate(BaseModel):
     payment_status: str
+
+class AdminCreate(BaseModel):
+    email: str
+    password: str
+    username: Optional[str] = ""
+
+class AdminUpdate(BaseModel):
+    email: Optional[str] = None
+    username: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class AdminPasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+class AdminPasswordSet(BaseModel):
+    new_password: str
 
 class ReviewCreate(BaseModel):
     name: str
@@ -167,9 +215,19 @@ class VoucherUpdate(BaseModel):
 
 @api_router.post("/auth/login")
 async def admin_login(data: AdminLogin, response: Response):
-    if data.username != ADMIN_USERNAME or data.password != ADMIN_PASSWORD:
+    ident = (data.username or "").strip()
+    ident_lower = ident.lower()
+    user = await db.admins.find_one({
+        "$or": [
+            {"email": ident_lower},
+            {"username": ident_lower},
+            {"email": ident},
+            {"username": ident},
+        ]
+    })
+    if not user or not user.get("is_active", True) or not verify_password(data.password, user.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = create_token("admin", "admin")
+    token = create_token(user["id"], "admin", user.get("email", ""))
     response.set_cookie(
         key="access_token",
         value=token,
@@ -179,7 +237,7 @@ async def admin_login(data: AdminLogin, response: Response):
         max_age=86400,
         path="/",
     )
-    return {"success": True, "token": token, "user": {"username": "admin", "role": "admin"}}
+    return {"success": True, "token": token, "user": {**sanitize_admin(user), "role": "admin"}}
 
 @api_router.post("/auth/logout")
 async def admin_logout(response: Response):
@@ -194,7 +252,114 @@ async def admin_logout(response: Response):
 @api_router.get("/auth/me")
 async def auth_me(request: Request):
     admin = await get_current_admin(request)
-    return {"success": True, "user": {"username": "admin", "role": admin["role"]}}
+    return {"success": True, "user": {**sanitize_admin(admin), "role": "admin"}}
+
+@api_router.put("/auth/password")
+async def change_own_password(data: AdminPasswordChange, request: Request):
+    admin = await get_current_admin(request)
+    if not verify_password(data.current_password, admin.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    validate_password_strength(data.new_password)
+    await db.admins.update_one(
+        {"id": admin["id"]},
+        {"$set": {"password_hash": hash_password(data.new_password), "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"success": True, "message": "Password updated"}
+
+# ─── Admin Users ───
+
+@api_router.get("/admins")
+async def list_admins(request: Request):
+    await get_current_admin(request)
+    admins = await db.admins.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", 1).to_list(200)
+    return {"success": True, "data": admins}
+
+@api_router.post("/admins")
+async def create_admin(data: AdminCreate, request: Request):
+    current = await get_current_admin(request)
+    if not current.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="Only the main admin can add accounts")
+    email = (data.email or "").strip().lower()
+    if "@" not in email:
+        raise HTTPException(status_code=400, detail="Valid email is required")
+    validate_password_strength(data.password)
+    existing = await db.admins.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="An account with this email already exists")
+    username = (data.username or email).strip().lower()
+    admin = {
+        "id": str(uuid.uuid4()),
+        "email": email,
+        "username": username,
+        "password_hash": hash_password(data.password),
+        "is_active": True,
+        "is_super_admin": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.admins.insert_one(admin)
+    admin.pop("_id", None)
+    return {"success": True, "data": sanitize_admin(admin)}
+
+@api_router.put("/admins/{admin_id}")
+async def update_admin(admin_id: str, data: AdminUpdate, request: Request):
+    current = await get_current_admin(request)
+    if not current.get("is_super_admin") and current.get("id") != admin_id:
+        raise HTTPException(status_code=403, detail="Not allowed to edit this account")
+    target = await db.admins.find_one({"id": admin_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    update = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if data.email is not None:
+        email = data.email.strip().lower()
+        if "@" not in email:
+            raise HTTPException(status_code=400, detail="Valid email is required")
+        dup = await db.admins.find_one({"email": email, "id": {"$ne": admin_id}})
+        if dup:
+            raise HTTPException(status_code=400, detail="An account with this email already exists")
+        update["email"] = email
+    if data.username is not None:
+        update["username"] = data.username.strip().lower()
+    if data.is_active is not None:
+        if not current.get("is_super_admin"):
+            raise HTTPException(status_code=403, detail="Only the main admin can deactivate accounts")
+        if target.get("is_super_admin") and not data.is_active:
+            raise HTTPException(status_code=400, detail="The main admin account cannot be deactivated")
+        update["is_active"] = data.is_active
+    result = await db.admins.update_one({"id": admin_id}, {"$set": update})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    admin = await db.admins.find_one({"id": admin_id}, {"_id": 0, "password_hash": 0})
+    return {"success": True, "data": admin}
+
+@api_router.put("/admins/{admin_id}/password")
+async def set_admin_password(admin_id: str, data: AdminPasswordSet, request: Request):
+    current = await get_current_admin(request)
+    if not current.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="Only the main admin can reset passwords")
+    validate_password_strength(data.new_password)
+    result = await db.admins.update_one(
+        {"id": admin_id},
+        {"$set": {"password_hash": hash_password(data.new_password), "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    return {"success": True, "message": "Password updated"}
+
+@api_router.delete("/admins/{admin_id}")
+async def delete_admin(admin_id: str, request: Request):
+    current = await get_current_admin(request)
+    if not current.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="Only the main admin can delete accounts")
+    target = await db.admins.find_one({"id": admin_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    if target.get("is_super_admin"):
+        raise HTTPException(status_code=400, detail="The main admin account cannot be deleted")
+    if target.get("id") == current.get("id"):
+        raise HTTPException(status_code=400, detail="You cannot delete your own account")
+    await db.admins.delete_one({"id": admin_id})
+    return {"success": True, "message": "Admin deleted"}
 
 # ─── Categories ───
 
@@ -349,7 +514,8 @@ async def create_order(data: OrderCreate):
         "total": final_total,
         "payment_method": data.payment_method,
         "gcash_proof": data.gcash_proof or "",
-        "payment_status": "Paid" if data.payment_method == "GCash" and data.gcash_proof else "Pending",
+        "special_instructions": (data.special_instructions or "").strip(),
+        "payment_status": "Pending",
         "status": "Pending",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -371,24 +537,51 @@ async def get_all_orders(request: Request):
     orders = await db.orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return {"success": True, "data": orders}
 
+ALLOWED_ORDER_STATUSES = ["Pending", "Confirmed", "Preparing", "Ready", "Completed", "Cancelled", "Refunded"]
+
+@api_router.put("/orders/batch-status")
+async def batch_update_order_status(data: OrderBatchStatusUpdate, request: Request):
+    await get_current_admin(request)
+    if data.status not in ALLOWED_ORDER_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    if not data.order_ids:
+        raise HTTPException(status_code=400, detail="No orders selected")
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"status": data.status, "updated_at": now}
+    if data.status == "Refunded":
+        update["payment_status"] = "Refunded"
+    result = await db.orders.update_many({"id": {"$in": data.order_ids}}, {"$set": update})
+    return {"success": True, "updated": result.modified_count}
+
 @api_router.put("/orders/{order_id}/status")
 async def update_order_status(order_id: str, data: OrderStatusUpdate, request: Request):
     await get_current_admin(request)
-    result = await db.orders.update_one(
-        {"id": order_id},
-        {"$set": {"status": data.status, "updated_at": datetime.now(timezone.utc).isoformat()}}
-    )
+    if data.status not in ALLOWED_ORDER_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"status": data.status, "updated_at": now}
+    if data.status == "Refunded":
+        update["payment_status"] = "Refunded"
+    result = await db.orders.update_one({"id": order_id}, {"$set": update})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Order not found")
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
     return {"success": True, "data": order}
 
+ALLOWED_PAYMENT_STATUSES = ["Pending", "Paid", "Refunded", "Rejected"]
+
 @api_router.put("/orders/{order_id}/payment")
 async def update_payment_status(order_id: str, data: PaymentStatusUpdate, request: Request):
     await get_current_admin(request)
+    if data.payment_status not in ALLOWED_PAYMENT_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid payment status")
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"payment_status": data.payment_status, "updated_at": now}
+    if data.payment_status == "Refunded":
+        update["status"] = "Refunded"
     result = await db.orders.update_one(
         {"id": order_id},
-        {"$set": {"payment_status": data.payment_status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        {"$set": update}
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -532,54 +725,86 @@ async def validate_voucher(request: Request):
 
 # ─── Analytics ───
 
-@api_router.get("/analytics")
-async def get_analytics(request: Request):
-    await get_current_admin(request)
-    orders = await db.orders.find({}, {"_id": 0}).to_list(5000)
-    products = await db.products.find({}, {"_id": 0}).to_list(200)
-    categories = await db.categories.find({}, {"_id": 0}).to_list(100)
+def _order_date_parts(order):
+    raw = order.get("created_at") or ""
+    try:
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        return dt.year, dt.month, dt.date().isoformat()
+    except Exception:
+        d = str(raw)[:10]
+        if len(d) >= 7 and d[4] == "-":
+            try:
+                return int(d[:4]), int(d[5:7]), d
+            except Exception:
+                return None, None, d
+        return None, None, d
 
-    total_orders = len(orders)
-    total_revenue = sum(o.get("total", 0) for o in orders)
-    avg_order = round(total_revenue / total_orders, 2) if total_orders else 0
-    paid_orders = sum(1 for o in orders if o.get("payment_status") == "Paid")
-    pending_orders = sum(1 for o in orders if o.get("status") == "Pending")
+def _counts_toward_revenue(order):
+    if order.get("payment_status") == "Refunded":
+        return False
+    if order.get("status") in ("Refunded", "Cancelled"):
+        return False
+    return True
 
-    # Orders by status
+def _build_analytics(orders, products, categories, year=None, month=None):
+    available_months = sorted({
+        f"{y}-{str(m).zfill(2)}"
+        for o in orders
+        for y, m, _ in [_order_date_parts(o)]
+        if y and m
+    }, reverse=True)
+
+    filtered = orders
+    period = "all"
+    if year:
+        filtered = [o for o in orders if _order_date_parts(o)[0] == year]
+        period = str(year)
+        if month:
+            filtered = [o for o in filtered if _order_date_parts(o)[1] == month]
+            period = f"{year}-{str(month).zfill(2)}"
+
+    revenue_orders = [o for o in filtered if _counts_toward_revenue(o)]
+    refunded_orders = [o for o in filtered if o.get("payment_status") == "Refunded" or o.get("status") == "Refunded"]
+
+    total_orders = len(filtered)
+    total_revenue = sum(o.get("total", 0) for o in revenue_orders)
+    refunded_total = sum(o.get("total", 0) for o in refunded_orders)
+    avg_order = round(total_revenue / len(revenue_orders), 2) if revenue_orders else 0
+    paid_orders = sum(1 for o in filtered if o.get("payment_status") == "Paid")
+    pending_orders = sum(1 for o in filtered if o.get("status") == "Pending")
+
     status_counts = {}
-    for o in orders:
+    for o in filtered:
         s = o.get("status", "Unknown")
         status_counts[s] = status_counts.get(s, 0) + 1
 
-    # Payment method breakdown
     payment_counts = {}
-    for o in orders:
+    for o in filtered:
         pm = o.get("payment_method", "Unknown")
         payment_counts[pm] = payment_counts.get(pm, 0) + 1
 
-    # Popular products (by order count)
     product_orders = {}
     product_revenue = {}
-    for o in orders:
+    for o in filtered:
         pn = o.get("product_name", "Unknown")
         product_orders[pn] = product_orders.get(pn, 0) + 1
-        product_revenue[pn] = product_revenue.get(pn, 0) + o.get("total", 0)
+        amt = o.get("total", 0) if _counts_toward_revenue(o) else 0
+        product_revenue[pn] = product_revenue.get(pn, 0) + amt
     top_products = sorted(product_orders.items(), key=lambda x: x[1], reverse=True)[:8]
 
-    # Revenue by date (last 30 days)
     daily_revenue = {}
     daily_orders = {}
-    for o in orders:
+    for o in filtered:
         try:
-            d = o.get("created_at", "")[:10]
+            _, _, d = _order_date_parts(o)
             if d:
-                daily_revenue[d] = daily_revenue.get(d, 0) + o.get("total", 0)
+                amt = o.get("total", 0) if _counts_toward_revenue(o) else 0
+                daily_revenue[d] = daily_revenue.get(d, 0) + amt
                 daily_orders[d] = daily_orders.get(d, 0) + 1
         except Exception:
             pass
-    revenue_chart = [{"date": k, "revenue": v, "orders": daily_orders.get(k, 0)} for k, v in sorted(daily_revenue.items())[-30:]]
+    revenue_chart = [{"date": k, "revenue": v, "orders": daily_orders.get(k, 0)} for k, v in sorted(daily_revenue.items())[-31:]]
 
-    # Category breakdown
     cat_map = {c["id"]: c["name"] for c in categories}
     cat_products = {}
     for p in products:
@@ -587,21 +812,34 @@ async def get_analytics(request: Request):
         cat_products[cn] = cat_products.get(cn, 0) + 1
 
     return {
-        "success": True,
-        "data": {
-            "total_orders": total_orders,
-            "total_revenue": round(total_revenue, 2),
-            "avg_order_value": avg_order,
-            "paid_orders": paid_orders,
-            "pending_orders": pending_orders,
-            "status_breakdown": status_counts,
-            "payment_breakdown": payment_counts,
-            "top_products": [{"name": n, "orders": c, "revenue": round(product_revenue.get(n, 0), 2)} for n, c in top_products],
-            "revenue_chart": revenue_chart,
-            "category_breakdown": cat_products,
-            "total_products": len(products),
-        }
+        "period": period,
+        "year": year,
+        "month": month,
+        "available_months": available_months,
+        "total_orders": total_orders,
+        "total_revenue": round(total_revenue, 2),
+        "refunded_total": round(refunded_total, 2),
+        "refunded_orders": len(refunded_orders),
+        "avg_order_value": avg_order,
+        "paid_orders": paid_orders,
+        "pending_orders": pending_orders,
+        "status_breakdown": status_counts,
+        "payment_breakdown": payment_counts,
+        "top_products": [{"name": n, "orders": c, "revenue": round(product_revenue.get(n, 0), 2)} for n, c in top_products],
+        "revenue_chart": revenue_chart,
+        "category_breakdown": cat_products,
+        "total_products": len(products),
     }
+
+@api_router.get("/analytics")
+async def get_analytics(request: Request, year: Optional[int] = None, month: Optional[int] = None):
+    await get_current_admin(request)
+    if month is not None and (month < 1 or month > 12):
+        raise HTTPException(status_code=400, detail="Month must be between 1 and 12")
+    orders = await db.orders.find({}, {"_id": 0}).to_list(5000)
+    products = await db.products.find({}, {"_id": 0}).to_list(200)
+    categories = await db.categories.find({}, {"_id": 0}).to_list(100)
+    return {"success": True, "data": _build_analytics(orders, products, categories, year, month)}
 
 # ─── Image Upload ───
 
@@ -662,6 +900,20 @@ SEED_PRODUCTS = [
 
 @app.on_event("startup")
 async def seed_data():
+    admin_count = await db.admins.count_documents({})
+    if admin_count == 0:
+        logger.info("Seeding default admin account...")
+        await db.admins.insert_one({
+            "id": str(uuid.uuid4()),
+            "email": DEFAULT_ADMIN_EMAIL,
+            "username": DEFAULT_ADMIN_EMAIL,
+            "password_hash": hash_password(DEFAULT_ADMIN_PASSWORD),
+            "is_active": True,
+            "is_super_admin": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        logger.info(f"Seeded admin account: {DEFAULT_ADMIN_EMAIL}")
     # Seed categories
     cat_count = await db.categories.count_documents({})
     category_map = {}
@@ -751,6 +1003,22 @@ async def seed_data():
             await db.vouchers.insert_one(voucher)
         logger.info("Seeded sample vouchers")
 
+    admin_count = await db.admins.count_documents({})
+    if admin_count == 0:
+        logger.info("Seeding default admin account...")
+        admin = {
+            "id": str(uuid.uuid4()),
+            "email": DEFAULT_ADMIN_EMAIL,
+            "username": "admin",
+            "password_hash": hash_password(DEFAULT_ADMIN_PASSWORD),
+            "is_active": True,
+            "is_super_admin": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.admins.insert_one(admin)
+        logger.info(f"Seeded main admin {DEFAULT_ADMIN_EMAIL}")
+
     # Create indexes
     await db.categories.create_index("id", unique=True)
     await db.products.create_index("id", unique=True)
@@ -759,6 +1027,8 @@ async def seed_data():
     await db.reviews.create_index("id", unique=True)
     await db.vouchers.create_index("id", unique=True)
     await db.vouchers.create_index("code", unique=True)
+    await db.admins.create_index("id", unique=True)
+    await db.admins.create_index("email", unique=True)
 
 # Include router & middleware
 app.include_router(api_router)

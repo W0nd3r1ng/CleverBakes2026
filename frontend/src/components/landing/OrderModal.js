@@ -18,6 +18,8 @@ export default function OrderModal({ product, onClose }) {
     paymentMethod: 'COD',
     gcashProof: '',
     voucherCode: '',
+    specialInstructions: '',
+    specialInstructions: '',
   });
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -44,7 +46,25 @@ export default function OrderModal({ product, onClose }) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => handleChange('gcashProof', reader.result);
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const max = 1400;
+        let { width, height } = img;
+        if (width > max || height > max) {
+          const ratio = Math.min(max / width, max / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        handleChange('gcashProof', canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.src = reader.result;
+    };
     reader.readAsDataURL(file);
   };
 
@@ -103,6 +123,7 @@ export default function OrderModal({ product, onClose }) {
         payment_method: form.paymentMethod,
         gcash_proof: form.gcashProof,
         voucher_code: voucherApplied ? form.voucherCode : '',
+        special_instructions: form.specialInstructions,
       });
 
       const order = res.data;
@@ -114,6 +135,8 @@ export default function OrderModal({ product, onClose }) {
       msg += `\nQuantity: ${form.quantity}`;
       if (discount > 0) msg += `\nSubtotal: PHP ${subtotal}\nDiscount: -PHP ${discount} (${voucherApplied?.code})`;
       msg += `\nTotal: PHP ${order.total}\n\nName: ${form.clientName}\nContact: ${form.contactNumber}\nAddress: ${form.address}\nDelivery: ${form.deliveryMethod}\nPayment: ${form.paymentMethod}`;
+      if (form.specialInstructions.trim()) msg += `\nSpecial Instructions: ${form.specialInstructions.trim()}`;
+      if (form.specialInstructions.trim()) msg += `\nSpecial Instructions: ${form.specialInstructions.trim()}`;
 
       const messengerUrl = `https://m.me/61554594188313?text=${encodeURIComponent(msg)}`;
       window.open(messengerUrl, '_blank');
@@ -203,6 +226,30 @@ export default function OrderModal({ product, onClose }) {
             <label className="block text-sm font-medium text-bark mb-1">Address <span className="text-red-400">*</span></label>
             <textarea value={form.address} onChange={e => handleChange('address', e.target.value)} rows={2} placeholder="Complete address" className={`w-full px-4 py-2.5 rounded-xl border ${errors.address ? 'border-red-300 bg-red-50' : 'border-soft-border'} bg-white text-bark focus:outline-none focus:ring-2 focus:ring-burnt-orange/30 resize-none`} data-testid="address-input" />
             {errors.address && <p className="text-xs text-red-500 mt-1">{errors.address}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-bark mb-1">Special Instructions</label>
+            <textarea
+              value={form.specialInstructions}
+              onChange={e => handleChange('specialInstructions', e.target.value)}
+              rows={3}
+              placeholder="e.g. less sugar, add a message on the cake..."
+              className="w-full px-4 py-2.5 rounded-xl border border-soft-border bg-white text-bark focus:outline-none focus:ring-2 focus:ring-burnt-orange/30 resize-none"
+              data-testid="special-instructions-input"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-bark mb-1">Special Instructions</label>
+            <textarea
+              value={form.specialInstructions}
+              onChange={e => handleChange('specialInstructions', e.target.value)}
+              rows={3}
+              placeholder="e.g. less sugar, add a message on the cake, allergy notes..."
+              className="w-full px-4 py-2.5 rounded-xl border border-soft-border bg-white text-bark focus:outline-none focus:ring-2 focus:ring-burnt-orange/30 resize-none"
+              data-testid="special-instructions-input"
+            />
           </div>
 
           <div>

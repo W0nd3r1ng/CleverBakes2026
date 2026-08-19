@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, Star, LogOut, Plus, Trash2, Edit2, Check, X, ChefHat, Tag, GripVertical, Flame, BarChart3, Ticket, TrendingUp, DollarSign, Clock, Users } from 'lucide-react';
-import { checkAuth, adminLogout, getProducts, createProduct, updateProduct, deleteProduct, getAllOrders, updateOrderStatus, updatePaymentStatus, deleteOrder, getReviews, toggleReview, deleteReview, uploadImage, getCategories, createCategory, updateCategory, deleteCategory, toggleBestseller, getVouchers, createVoucher, updateVoucher, deleteVoucher, getAnalytics } from '../api';
+import { Package, ShoppingCart, Star, LogOut, Plus, Trash2, Edit2, Check, X, ChefHat, Tag, GripVertical, Flame, BarChart3, Ticket, TrendingUp, DollarSign, Clock, Users, RefreshCw, KeyRound, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import { checkAuth, adminLogout, getProducts, createProduct, updateProduct, deleteProduct, getAllOrders, updateOrderStatus, batchUpdateOrderStatus, updatePaymentStatus, deleteOrder, getReviews, toggleReview, deleteReview, uploadImage, getCategories, createCategory, updateCategory, deleteCategory, toggleBestseller, getVouchers, createVoucher, updateVoucher, deleteVoucher, getAnalytics, getAdmins, createAdmin, updateAdmin, setAdminPassword, deleteAdmin, changeOwnPassword } from '../api';
 
 const TABS = [
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
@@ -10,10 +10,11 @@ const TABS = [
   { id: 'orders', label: 'Orders', icon: ShoppingCart },
   { id: 'vouchers', label: 'Vouchers', icon: Ticket },
   { id: 'reviews', label: 'Reviews', icon: Star },
+  { id: 'users', label: 'User Management', icon: Users },
 ];
 
-const ORDER_STATUSES = ['Pending', 'Confirmed', 'Preparing', 'Ready', 'Completed'];
-const PAYMENT_STATUSES = ['Pending', 'Paid', 'Refunded'];
+const ORDER_STATUSES = ['Pending', 'Confirmed', 'Preparing', 'Ready', 'Completed', 'Cancelled', 'Refunded'];
+const PAYMENT_STATUSES = ['Pending', 'Paid', 'Refunded', 'Rejected'];
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -24,17 +25,20 @@ export default function AdminDashboard() {
   const [reviews, setReviews] = useState([]);
   const [vouchers, setVouchers] = useState([]);
   const [analytics, setAnalytics] = useState(null);
+  const [admins, setAdmins] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [toast, setToast] = useState('');
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const loadData = useCallback(async () => {
     try {
-      const [pRes, cRes, oRes, rRes, vRes, aRes] = await Promise.all([
-        getProducts(), getCategories(), getAllOrders(), getReviews(false), getVouchers(), getAnalytics()
+      const [pRes, cRes, oRes, rRes, vRes, aRes, uRes] = await Promise.all([
+        getProducts(), getCategories(), getAllOrders(), getReviews(false), getVouchers(), getAnalytics(), getAdmins()
       ]);
       setProducts(pRes.data || []);
       setCategories(cRes.data || []);
@@ -42,6 +46,7 @@ export default function AdminDashboard() {
       setReviews(rRes.data || []);
       setVouchers(vRes.data || []);
       setAnalytics(aRes.data || null);
+      setAdmins(uRes.data || []);
     } catch (e) {
       console.error('Load error:', e);
     } finally {
@@ -57,7 +62,8 @@ export default function AdminDashboard() {
         return;
       }
       try {
-        await checkAuth();
+        const me = await checkAuth();
+        setCurrentUser(me.user || null);
         await loadData();
       } catch (err) {
         if (err.response?.status === 401) {
@@ -68,6 +74,22 @@ export default function AdminDashboard() {
     };
     verifyAuth();
   }, [navigate, loadData]);
+
+  useEffect(() => {
+    if (loading) return;
+    const tick = async () => {
+      try {
+        const oRes = await getAllOrders();
+        setOrders(oRes.data || []);
+        if (activeTab === 'analytics') {
+          const aRes = await getAnalytics();
+          setAnalytics(aRes.data || null);
+        }
+      } catch {}
+    };
+    const id = setInterval(tick, 8000);
+    return () => clearInterval(id);
+  }, [loading, activeTab]);
 
   const handleLogout = async () => {
     try { await adminLogout(); } catch {}
@@ -87,16 +109,25 @@ export default function AdminDashboard() {
   const handleSaveCategory = async (data, editId) => { try { if (editId) { await updateCategory(editId, data); showToast('Category updated'); } else { await createCategory(data); showToast('Category created'); } loadData(); } catch (e) { showToast('Error: ' + (e.response?.data?.detail || e.message)); } };
   const handleDeleteCategory = async (id) => { if (!window.confirm('Delete this category?')) return; try { await deleteCategory(id); showToast('Category deleted'); loadData(); } catch { showToast('Failed to delete'); } };
   const handleOrderStatus = async (id, s) => { try { await updateOrderStatus(id, s); showToast('Status updated'); loadData(); } catch { showToast('Failed'); } };
+  const handleBatchStatus = async (ids, s) => { try { await batchUpdateOrderStatus(ids, s); showToast(`Updated ${ids.length} order${ids.length === 1 ? '' : 's'}`); loadData(); } catch { showToast('Failed'); } };
   const handlePaymentStatus = async (id, s) => { try { await updatePaymentStatus(id, s); showToast('Payment updated'); loadData(); } catch { showToast('Failed'); } };
   const handleDeleteOrder = async (id) => { if (!window.confirm('Delete this order?')) return; try { await deleteOrder(id); showToast('Order deleted'); loadData(); } catch { showToast('Failed'); } };
   const handleToggleReview = async (id, approved) => { try { await toggleReview(id, approved); showToast(approved ? 'Approved' : 'Hidden'); loadData(); } catch { showToast('Failed'); } };
   const handleDeleteReview = async (id) => { if (!window.confirm('Delete?')) return; try { await deleteReview(id); showToast('Deleted'); loadData(); } catch { showToast('Failed'); } };
   const handleSaveVoucher = async (data, editId) => { try { if (editId) { await updateVoucher(editId, data); showToast('Voucher updated'); } else { await createVoucher(data); showToast('Voucher created'); } loadData(); } catch (e) { showToast('Error: ' + (e.response?.data?.detail || e.message)); } };
   const handleDeleteVoucher = async (id) => { if (!window.confirm('Delete this voucher?')) return; try { await deleteVoucher(id); showToast('Voucher deleted'); loadData(); } catch { showToast('Failed'); } };
+  const handleSaveAdmin = async (data, editId) => { try { if (editId) { await updateAdmin(editId, data); showToast('Account updated'); } else { await createAdmin(data); showToast('Admin account created'); } loadData(); } catch (e) { showToast('Error: ' + (e.response?.data?.detail || e.message)); } };
+  const handleSetAdminPassword = async (id, password) => { try { await setAdminPassword(id, password); showToast('Password updated'); } catch (e) { showToast('Error: ' + (e.response?.data?.detail || e.message)); throw e; } };
+  const handleDeleteAdmin = async (id) => { if (!window.confirm('Delete this admin account?')) return; try { await deleteAdmin(id); showToast('Account deleted'); loadData(); } catch (e) { showToast('Error: ' + (e.response?.data?.detail || e.message)); } };
+  const handleChangeOwnPassword = async (currentPassword, newPassword) => {
+    await changeOwnPassword(currentPassword, newPassword);
+    showToast('Password changed');
+    setShowPasswordModal(false);
+  };
 
   const getCategoryName = (catId) => { const c = categories.find(x => x.id === catId); return c ? c.name : '—'; };
 
-  const tabCounts = { products: products.length, categories: categories.length, orders: orders.length, reviews: reviews.length, vouchers: vouchers.length, analytics: '' };
+  const tabCounts = { products: products.length, categories: categories.length, orders: orders.length, reviews: reviews.length, vouchers: vouchers.length, analytics: '', users: admins.length };
 
   if (loading) return <div className="min-h-screen bg-cream flex items-center justify-center"><div className="text-mocha">Loading dashboard...</div></div>;
 
@@ -116,31 +147,53 @@ export default function AdminDashboard() {
               </button>
             ))}
           </nav>
+          <button onClick={() => setShowPasswordModal(true)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-mocha hover:text-bark transition-colors" data-testid="change-password-button"><KeyRound size={18} /> Change Password</button>
           <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2.5 text-sm text-mocha hover:text-red-600 transition-colors" data-testid="admin-logout-button"><LogOut size={18} /> Logout</button>
         </aside>
 
         <main className="flex-1 p-8 overflow-auto">
-          {activeTab === 'analytics' && <AnalyticsTab analytics={analytics} />}
+          {activeTab === 'analytics' && <AnalyticsTab analytics={analytics} onLoadPeriod={async (year, month) => { const aRes = await getAnalytics(year, month); setAnalytics(aRes.data || null); }} />}
           {activeTab === 'products' && <ProductsTab products={products} categories={categories} getCategoryName={getCategoryName} onAdd={() => { setEditProduct(null); setShowModal(true); }} onEdit={(p) => { setEditProduct(p); setShowModal(true); }} onDelete={handleDeleteProduct} onToggleBestseller={handleToggleBestseller} />}
           {activeTab === 'categories' && <CategoriesTab categories={categories} products={products} onSave={handleSaveCategory} onDelete={handleDeleteCategory} />}
-          {activeTab === 'orders' && <OrdersTab orders={orders} onStatusChange={handleOrderStatus} onPaymentChange={handlePaymentStatus} onDelete={handleDeleteOrder} />}
+          {activeTab === 'orders' && <OrdersTab orders={orders} onStatusChange={handleOrderStatus} onBatchStatus={handleBatchStatus} onPaymentChange={handlePaymentStatus} onDelete={handleDeleteOrder} onRefresh={loadData} />}
           {activeTab === 'vouchers' && <VouchersTab vouchers={vouchers} onSave={handleSaveVoucher} onDelete={handleDeleteVoucher} />}
           {activeTab === 'reviews' && <ReviewsTab reviews={reviews} onToggle={handleToggleReview} onDelete={handleDeleteReview} />}
+          {activeTab === 'users' && <UsersTab admins={admins} currentUser={currentUser} onSave={handleSaveAdmin} onSetPassword={handleSetAdminPassword} onDelete={handleDeleteAdmin} />}
         </main>
       </div>
 
       {showModal && <ProductModal product={editProduct} categories={categories} onSave={handleSaveProduct} onClose={() => { setShowModal(false); setEditProduct(null); }} />}
+      {showPasswordModal && <PasswordModal onSave={handleChangeOwnPassword} onClose={() => setShowPasswordModal(false)} />}
       {toast && <div className="fixed bottom-6 right-6 bg-bark text-white px-5 py-3 rounded-xl shadow-lg z-50 animate-fade-in-up" data-testid="admin-toast">{toast}</div>}
     </div>
   );
 }
 
 // ─── Analytics Tab ───
-function AnalyticsTab({ analytics }) {
+function AnalyticsTab({ analytics, onLoadPeriod }) {
+  const now = new Date();
+  const [mode, setMode] = useState('all');
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+
   if (!analytics) return <div className="text-mocha text-center py-20">Loading analytics...</div>;
 
+  const years = Array.from(new Set((analytics.available_months || []).map(m => parseInt(m.slice(0, 4), 10)).concat([now.getFullYear()]))).sort((a, b) => b - a);
+  const months = [
+    { v: 1, l: 'January' }, { v: 2, l: 'February' }, { v: 3, l: 'March' }, { v: 4, l: 'April' },
+    { v: 5, l: 'May' }, { v: 6, l: 'June' }, { v: 7, l: 'July' }, { v: 8, l: 'August' },
+    { v: 9, l: 'September' }, { v: 10, l: 'October' }, { v: 11, l: 'November' }, { v: 12, l: 'December' },
+  ];
+
+  const applyPeriod = async (nextMode, nextYear, nextMonth) => {
+    setMode(nextMode);
+    if (nextMode === 'all') await onLoadPeriod();
+    else await onLoadPeriod(nextYear, nextMonth);
+  };
+
   const statCards = [
-    { label: 'Total Revenue', value: `₱${analytics.total_revenue.toLocaleString()}`, icon: DollarSign, color: 'text-green-600 bg-green-100' },
+    { label: 'Total Revenue', value: `₱${(analytics.total_revenue || 0).toLocaleString()}`, icon: DollarSign, color: 'text-green-600 bg-green-100' },
+    { label: 'Refunded', value: `₱${(analytics.refunded_total || 0).toLocaleString()}`, icon: TrendingUp, color: 'text-red-600 bg-red-100' },
     { label: 'Total Orders', value: analytics.total_orders, icon: ShoppingCart, color: 'text-blue-600 bg-blue-100' },
     { label: 'Avg Order', value: `₱${analytics.avg_order_value}`, icon: TrendingUp, color: 'text-burnt-orange bg-burnt-orange/10' },
     { label: 'Paid Orders', value: analytics.paid_orders, icon: Check, color: 'text-green-600 bg-green-100' },
@@ -153,10 +206,26 @@ function AnalyticsTab({ analytics }) {
 
   return (
     <div data-testid="analytics-tab">
-      <h2 className="font-heading text-2xl font-semibold text-bark mb-6">Dashboard Analytics</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <h2 className="font-heading text-2xl font-semibold text-bark">Dashboard Analytics</h2>
+        <div className="flex flex-wrap items-center gap-2" data-testid="analytics-period-controls">
+          <button onClick={() => applyPeriod('all')} className={`px-3 py-2 rounded-xl text-sm font-semibold ${mode === 'all' ? 'bg-burnt-orange text-white' : 'bg-white border border-soft-border text-bark'}`}>All Time</button>
+          <button onClick={() => applyPeriod('month', year, month)} className={`px-3 py-2 rounded-xl text-sm font-semibold ${mode === 'month' ? 'bg-burnt-orange text-white' : 'bg-white border border-soft-border text-bark'}`}>Monthly</button>
+          {mode === 'month' && (
+            <>
+              <select value={month} onChange={e => { const m = parseInt(e.target.value, 10); setMonth(m); applyPeriod('month', year, m); }} className="px-3 py-2 rounded-xl border border-soft-border bg-white text-sm text-bark">
+                {months.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+              </select>
+              <select value={year} onChange={e => { const y = parseInt(e.target.value, 10); setYear(y); applyPeriod('month', y, month); }} className="px-3 py-2 rounded-xl border border-soft-border bg-white text-sm text-bark">
+                {years.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8" data-testid="analytics-stats">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4 mb-8" data-testid="analytics-stats">
         {statCards.map((s, i) => (
           <div key={i} className="bg-white rounded-2xl border border-soft-border p-4 hover:shadow-sm transition-shadow">
             <div className={`w-9 h-9 rounded-xl ${s.color} flex items-center justify-center mb-3`}><s.icon size={18} /></div>
@@ -221,7 +290,7 @@ function AnalyticsTab({ analytics }) {
           <h3 className="font-heading font-semibold text-bark mb-4">Order Status</h3>
           <div className="space-y-3">
             {Object.entries(analytics.status_breakdown).map(([status, count]) => {
-              const colors = { Pending: 'bg-yellow-500', Confirmed: 'bg-blue-500', Preparing: 'bg-purple-500', Ready: 'bg-green-500', Completed: 'bg-bark' };
+              const colors = { Pending: 'bg-yellow-500', Confirmed: 'bg-blue-500', Preparing: 'bg-purple-500', Ready: 'bg-green-500', Completed: 'bg-bark', Cancelled: 'bg-red-400', Refunded: 'bg-red-700' };
               return (
                 <div key={status} className="flex items-center gap-3">
                   <div className={`w-3 h-3 rounded-full ${colors[status] || 'bg-mocha'}`} />
@@ -447,33 +516,139 @@ function ProductsTab({ products, categories, getCategoryName, onAdd, onEdit, onD
 }
 
 // ─── Orders Tab ───
-function OrdersTab({ orders, onStatusChange, onPaymentChange, onDelete }) {
+function OrdersTab({ orders, onStatusChange, onBatchStatus, onPaymentChange, onDelete, onRefresh }) {
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [selected, setSelected] = useState([]);
+  const [batchStatus, setBatchStatus] = useState('Confirmed');
+  const [proofOrder, setProofOrder] = useState(null);
+
+  const counts = ORDER_STATUSES.reduce((acc, s) => { acc[s] = orders.filter(o => o.status === s).length; return acc; }, {});
+  const filtered = statusFilter === 'All' ? orders : orders.filter(o => o.status === statusFilter);
+  const allVisibleIds = filtered.map(o => o.id);
+  const allSelected = allVisibleIds.length > 0 && allVisibleIds.every(id => selected.includes(id));
+
+  const toggleOne = (id) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const toggleAll = () => setSelected(allSelected ? selected.filter(id => !allVisibleIds.includes(id)) : Array.from(new Set([...selected, ...allVisibleIds])));
+
+  const applyBatch = () => {
+    if (!selected.length) return;
+    onBatchStatus(selected, batchStatus);
+    setSelected([]);
+  };
+
+  const statusColor = (s) => ({
+    Pending: 'bg-yellow-100 text-yellow-700',
+    Confirmed: 'bg-blue-100 text-blue-700',
+    Preparing: 'bg-purple-100 text-purple-700',
+    Ready: 'bg-green-100 text-green-700',
+    Completed: 'bg-bark text-white',
+    Cancelled: 'bg-red-100 text-red-700',
+    Refunded: 'bg-red-200 text-red-800',
+  }[s] || 'bg-warm-sand text-mocha');
+
   return (
     <div>
-      <h2 className="font-heading text-2xl font-semibold text-bark mb-6">Orders</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <h2 className="font-heading text-2xl font-semibold text-bark">Orders</h2>
+        <button onClick={onRefresh} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-soft-border bg-white text-sm font-medium text-bark hover:bg-warm-sand" data-testid="refresh-orders-button"><RefreshCw size={14} /> Refresh</button>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-4" data-testid="order-status-filters">
+        <button onClick={() => setStatusFilter('All')} className={`px-3 py-1.5 rounded-full text-xs font-semibold ${statusFilter === 'All' ? 'bg-burnt-orange text-white' : 'bg-white border border-soft-border text-bark'}`}>All ({orders.length})</button>
+        {ORDER_STATUSES.map(s => (
+          <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-full text-xs font-semibold ${statusFilter === s ? 'bg-burnt-orange text-white' : 'bg-white border border-soft-border text-bark'}`}>{s} ({counts[s] || 0})</button>
+        ))}
+      </div>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-white border border-soft-border rounded-xl" data-testid="batch-status-bar">
+          <span className="text-sm font-medium text-bark">{selected.length} selected</span>
+          <select value={batchStatus} onChange={e => setBatchStatus(e.target.value)} className="text-sm border border-soft-border rounded-lg px-2 py-1.5 bg-white">{ORDER_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select>
+          <button onClick={applyBatch} className="px-3 py-1.5 bg-burnt-orange text-white rounded-lg text-sm font-semibold">Update Status</button>
+          <button onClick={() => setSelected([])} className="text-sm text-mocha hover:text-bark">Clear</button>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-soft-border overflow-hidden"><div className="overflow-x-auto">
-        <table className="w-full" data-testid="orders-table"><thead><tr className="border-b border-soft-border"><th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Order #</th><th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Product</th><th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Customer</th><th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Total</th><th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Payment</th><th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Pay Status</th><th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Status</th><th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Date</th><th className="text-right px-4 py-3 text-xs text-mocha uppercase tracking-wider">Del</th></tr></thead>
+        <table className="w-full" data-testid="orders-table"><thead><tr className="border-b border-soft-border">
+          <th className="px-3 py-3"><input type="checkbox" checked={allSelected} onChange={toggleAll} data-testid="select-all-orders" /></th>
+          <th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Order #</th>
+          <th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Product</th>
+          <th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Customer</th>
+          <th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Total</th>
+          <th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Payment</th>
+          <th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Proof</th>
+          <th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Status</th>
+          <th className="text-left px-4 py-3 text-xs text-mocha uppercase tracking-wider">Date</th>
+          <th className="text-right px-4 py-3 text-xs text-mocha uppercase tracking-wider">Del</th>
+        </tr></thead>
           <tbody>
-            {orders.map(o => (
-              <tr key={o.id} className="border-b border-soft-border/50 hover:bg-warm-sand/30 transition-colors">
+            {filtered.map(o => (
+              <tr key={o.id} className="border-b border-soft-border/50 hover:bg-warm-sand/30 transition-colors align-top">
+                <td className="px-3 py-3"><input type="checkbox" checked={selected.includes(o.id)} onChange={() => toggleOne(o.id)} data-testid={`select-order-${o.id}`} /></td>
                 <td className="px-4 py-3 text-sm font-mono font-semibold text-bark">{o.order_number}</td>
-                <td className="px-4 py-3 text-sm text-bark">{o.product_name}</td>
-                <td className="px-4 py-3"><p className="text-sm text-bark">{o.customer_name}</p><p className="text-xs text-mocha">{o.contact_number}</p></td>
+                <td className="px-4 py-3">
+                  <p className="text-sm text-bark">{o.product_name}</p>
+                  {(o.flavor || o.size) && <p className="text-xs text-mocha">{[o.flavor, o.size].filter(Boolean).join(' · ')}</p>}
+                  {o.special_instructions && <p className="text-xs text-burnt-orange mt-1 max-w-[220px]"><span className="font-semibold">Instructions:</span> {o.special_instructions}</p>}
+                </td>
+                <td className="px-4 py-3"><p className="text-sm text-bark">{o.customer_name}</p><p className="text-xs text-mocha">{o.contact_number}</p><p className="text-xs text-mocha max-w-[180px] truncate">{o.address}</p></td>
                 <td className="px-4 py-3">
                   <span className="text-sm font-semibold text-burnt-orange">&#8369;{o.total}</span>
                   {o.voucher_code && <span className="block text-[10px] text-green-600 font-medium">{o.voucher_code} (-₱{o.discount})</span>}
                 </td>
-                <td className="px-4 py-3"><span className={`text-xs font-semibold px-2 py-1 rounded-full ${o.payment_method === 'GCash' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>{o.payment_method}</span></td>
-                <td className="px-4 py-3"><select value={o.payment_status} onChange={(e) => onPaymentChange(o.id, e.target.value)} className="text-xs border border-soft-border rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-burnt-orange" data-testid={`payment-select-${o.id}`}>{PAYMENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></td>
-                <td className="px-4 py-3"><select value={o.status} onChange={(e) => onStatusChange(o.id, e.target.value)} className="text-xs border border-soft-border rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-burnt-orange" data-testid={`status-select-${o.id}`}>{ORDER_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></td>
+                <td className="px-4 py-3">
+                  <span className={`text-xs font-semibold px-2 py-1 rounded-full ${o.payment_method === 'GCash' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>{o.payment_method}</span>
+                  <select value={o.payment_status} onChange={(e) => onPaymentChange(o.id, e.target.value)} className="mt-1 block text-xs border border-soft-border rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-burnt-orange" data-testid={`payment-select-${o.id}`}>{PAYMENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                </td>
+                <td className="px-4 py-3">
+                  {o.gcash_proof ? (
+                    <div className="space-y-1">
+                      <button type="button" onClick={() => setProofOrder(o)} className="block" data-testid={`view-gcash-${o.id}`}>
+                        <img src={o.gcash_proof} alt="GCash proof" className="w-14 h-14 object-cover rounded-lg border border-soft-border" />
+                      </button>
+                      {o.payment_status !== 'Paid' && o.payment_status !== 'Refunded' && (
+                        <div className="flex gap-1">
+                          <button onClick={() => onPaymentChange(o.id, 'Paid')} className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-semibold">Approve</button>
+                          <button onClick={() => onPaymentChange(o.id, 'Rejected')} className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">Reject</button>
+                        </div>
+                      )}
+                    </div>
+                  ) : <span className="text-xs text-mocha">—</span>}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-col gap-1.5 min-w-[140px]">
+                    <span className={`self-start text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusColor(o.status)}`}>{o.status}</span>
+                    <select value={o.status} onChange={(e) => onStatusChange(o.id, e.target.value)} className="text-xs border border-soft-border rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-burnt-orange" data-testid={`status-select-${o.id}`}>{ORDER_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                    {o.status !== 'Completed' && o.status !== 'Cancelled' && o.status !== 'Refunded' && (
+                      <button onClick={() => onStatusChange(o.id, 'Completed')} className="inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700" data-testid={`complete-order-${o.id}`}><CheckCircle2 size={12} /> Complete Order</button>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-xs text-mocha">{new Date(o.created_at).toLocaleDateString()}</td>
                 <td className="px-4 py-3"><button onClick={() => onDelete(o.id)} className="p-1.5 text-mocha hover:text-red-500" data-testid={`delete-order-${o.id}`}><Trash2 size={15} /></button></td>
               </tr>
             ))}
-            {orders.length === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-mocha">No orders yet</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={10} className="px-4 py-8 text-center text-mocha">No orders in this status</td></tr>}
           </tbody>
         </table>
       </div></div>
+
+      {proofOrder && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setProofOrder(null)} data-testid="gcash-proof-modal">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-heading font-semibold text-bark">GCash Proof · #{proofOrder.order_number}</h3>
+              <button onClick={() => setProofOrder(null)} className="text-mocha hover:text-bark"><X size={18} /></button>
+            </div>
+            <img src={proofOrder.gcash_proof} alt="GCash proof" className="w-full max-h-[70vh] object-contain rounded-xl border border-soft-border mb-4" />
+            <div className="flex gap-2">
+              <button onClick={() => { onPaymentChange(proofOrder.id, 'Paid'); setProofOrder(null); }} className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold">Approve Payment</button>
+              <button onClick={() => { onPaymentChange(proofOrder.id, 'Rejected'); setProofOrder(null); }} className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold">Reject</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
