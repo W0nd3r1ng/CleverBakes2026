@@ -32,9 +32,32 @@ export default function AdminDashboard() {
   const [editProduct, setEditProduct] = useState(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [toast, setToast] = useState('');
-  const [notifications, setNotifications] = useState({ products: 0, reviews: 0, orders: 0 });
+  const [notifications, setNotifications] = useState({ products: 0, categories: 0, reviews: 0, orders: 0 });
   const knownIds = useRef({ products: new Set(), reviews: new Set(), orders: new Set() });
   const activeTabRef = useRef(activeTab);
+  const notificationSeenKey = 'cleverbakes-admin-notifications-seen';
+
+  const getActivityTime = (item) => item.updated_at || item.created_at || '';
+  const getLatestActivity = (items) => items.reduce((latest, item) => {
+    const activity = getActivityTime(item);
+    return activity > latest ? activity : latest;
+  }, '');
+  const getSeenTimes = () => {
+    try {
+      return JSON.parse(localStorage.getItem(notificationSeenKey)) || {};
+    } catch {
+      return {};
+    }
+  };
+  const saveSeenTime = (tabId, items) => {
+    const seen = getSeenTimes();
+    seen[tabId] = getLatestActivity(items) || new Date().toISOString();
+    localStorage.setItem(notificationSeenKey, JSON.stringify(seen));
+  };
+  const countUnseen = (items, seenAt, pendingOnly = false) => items.filter(item => {
+    if (pendingOnly && item.approved) return false;
+    return getActivityTime(item) > (seenAt || '');
+  }).length;
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
@@ -53,6 +76,23 @@ export default function AdminDashboard() {
       setVouchers(vRes.data || []);
       setAnalytics(aRes.data || null);
       setAdmins(uRes.data || []);
+      const seen = getSeenTimes();
+      const hasSeenHistory = ['products', 'categories', 'reviews', 'orders'].some(tab => seen[tab]);
+      if (!hasSeenHistory) {
+        setNotifications({
+          products: nextProducts.length,
+          categories: (cRes.data || []).length,
+          reviews: nextReviews.filter(item => !item.approved).length,
+          orders: nextOrders.length,
+        });
+      } else {
+        setNotifications({
+          products: countUnseen(nextProducts, seen.products),
+          categories: countUnseen(cRes.data || [], seen.categories),
+          reviews: countUnseen(nextReviews, seen.reviews, true),
+          orders: countUnseen(nextOrders, seen.orders),
+        });
+      }
       knownIds.current = {
         products: new Set(nextProducts.map(item => item.id)),
         reviews: new Set(nextReviews.map(item => item.id)),
@@ -95,9 +135,7 @@ export default function AdminDashboard() {
         const nextCategories = cRes.data || [];
         const nextReviews = rRes.data || [];
         const nextOrders = oRes.data || [];
-        const newProducts = nextProducts.filter(item => !knownIds.current.products.has(item.id)).length;
-        const newReviews = nextReviews.filter(item => !knownIds.current.reviews.has(item.id) && !item.approved).length;
-        const newOrders = nextOrders.filter(item => !knownIds.current.orders.has(item.id)).length;
+        const seen = getSeenTimes();
         knownIds.current = {
           products: new Set(nextProducts.map(item => item.id)),
           reviews: new Set(nextReviews.map(item => item.id)),
@@ -107,11 +145,12 @@ export default function AdminDashboard() {
         setCategories(nextCategories);
         setReviews(nextReviews);
         setOrders(nextOrders);
-        setNotifications(current => ({
-          products: activeTabRef.current === 'products' ? 0 : current.products + newProducts,
-          reviews: activeTabRef.current === 'reviews' ? 0 : current.reviews + newReviews,
-          orders: activeTabRef.current === 'orders' ? 0 : current.orders + newOrders,
-        }));
+        setNotifications({
+          products: activeTabRef.current === 'products' ? 0 : countUnseen(nextProducts, seen.products),
+          categories: activeTabRef.current === 'categories' ? 0 : countUnseen(nextCategories, seen.categories),
+          reviews: activeTabRef.current === 'reviews' ? 0 : countUnseen(nextReviews, seen.reviews, true),
+          orders: activeTabRef.current === 'orders' ? 0 : countUnseen(nextOrders, seen.orders),
+        });
         if (activeTab === 'analytics') {
           const aRes = await getAnalytics();
           setAnalytics(aRes.data || null);
@@ -125,7 +164,9 @@ export default function AdminDashboard() {
   const changeTab = (tabId) => {
     activeTabRef.current = tabId;
     setActiveTab(tabId);
-    if (tabId === 'products' || tabId === 'reviews' || tabId === 'orders') {
+    const tabItems = { products, categories, reviews, orders };
+    if (tabItems[tabId]) {
+      saveSeenTime(tabId, tabItems[tabId]);
       setNotifications(current => ({ ...current, [tabId]: 0 }));
     }
   };
@@ -166,7 +207,7 @@ export default function AdminDashboard() {
 
   const getCategoryName = (catId) => { const c = categories.find(x => x.id === catId); return c ? c.name : '—'; };
 
-  const tabCounts = { products: notifications.products, categories: '', orders: notifications.orders, reviews: notifications.reviews, vouchers: '', analytics: '', users: '' };
+  const tabCounts = { products: notifications.products, categories: notifications.categories, orders: notifications.orders, reviews: notifications.reviews, vouchers: '', analytics: '', users: '' };
   const visibleTabs = TABS.filter(tab => tab.id !== 'users' || currentUser?.is_super_admin);
 
   if (loading) return <div className="min-h-screen bg-cream flex items-center justify-center"><div className="text-mocha">Loading dashboard...</div></div>;
