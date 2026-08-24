@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, ShoppingCart, Star, LogOut, Plus, Trash2, Edit2, Check, X, ChefHat, Tag, GripVertical, Flame, BarChart3, Ticket, TrendingUp, DollarSign, Clock, Users, RefreshCw, KeyRound, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { checkAuth, adminLogout, getProducts, createProduct, updateProduct, deleteProduct, getAllOrders, updateOrderStatus, batchUpdateOrderStatus, updatePaymentStatus, deleteOrder, getReviews, toggleReview, deleteReview, uploadImage, getCategories, createCategory, updateCategory, deleteCategory, toggleBestseller, getVouchers, createVoucher, updateVoucher, deleteVoucher, getAnalytics, getAdmins, createAdmin, updateAdmin, setAdminPassword, deleteAdmin, changeOwnPassword } from '../api';
@@ -32,6 +32,9 @@ export default function AdminDashboard() {
   const [editProduct, setEditProduct] = useState(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [toast, setToast] = useState('');
+  const [notifications, setNotifications] = useState({ products: 0, reviews: 0, orders: 0 });
+  const knownIds = useRef({ products: new Set(), reviews: new Set(), orders: new Set() });
+  const activeTabRef = useRef(activeTab);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
@@ -40,13 +43,21 @@ export default function AdminDashboard() {
       const [pRes, cRes, oRes, rRes, vRes, aRes, uRes] = await Promise.all([
         getProducts(), getCategories(), getAllOrders(), getReviews(false), getVouchers(), getAnalytics(), getAdmins()
       ]);
-      setProducts(pRes.data || []);
+      const nextProducts = pRes.data || [];
+      const nextOrders = oRes.data || [];
+      const nextReviews = rRes.data || [];
+      setProducts(nextProducts);
       setCategories(cRes.data || []);
-      setOrders(oRes.data || []);
-      setReviews(rRes.data || []);
+      setOrders(nextOrders);
+      setReviews(nextReviews);
       setVouchers(vRes.data || []);
       setAnalytics(aRes.data || null);
       setAdmins(uRes.data || []);
+      knownIds.current = {
+        products: new Set(nextProducts.map(item => item.id)),
+        reviews: new Set(nextReviews.map(item => item.id)),
+        orders: new Set(nextOrders.map(item => item.id)),
+      };
     } catch (e) {
       console.error('Load error:', e);
     } finally {
@@ -79,8 +90,26 @@ export default function AdminDashboard() {
     if (loading) return;
     const tick = async () => {
       try {
-        const oRes = await getAllOrders();
-        setOrders(oRes.data || []);
+        const [pRes, rRes, oRes] = await Promise.all([getProducts(), getReviews(false), getAllOrders()]);
+        const nextProducts = pRes.data || [];
+        const nextReviews = rRes.data || [];
+        const nextOrders = oRes.data || [];
+        const newProducts = nextProducts.filter(item => !knownIds.current.products.has(item.id)).length;
+        const newReviews = nextReviews.filter(item => !knownIds.current.reviews.has(item.id) && !item.approved).length;
+        const newOrders = nextOrders.filter(item => !knownIds.current.orders.has(item.id)).length;
+        knownIds.current = {
+          products: new Set(nextProducts.map(item => item.id)),
+          reviews: new Set(nextReviews.map(item => item.id)),
+          orders: new Set(nextOrders.map(item => item.id)),
+        };
+        setProducts(nextProducts);
+        setReviews(nextReviews);
+        setOrders(nextOrders);
+        setNotifications(current => ({
+          products: activeTabRef.current === 'products' ? 0 : current.products + newProducts,
+          reviews: activeTabRef.current === 'reviews' ? 0 : current.reviews + newReviews,
+          orders: activeTabRef.current === 'orders' ? 0 : current.orders + newOrders,
+        }));
         if (activeTab === 'analytics') {
           const aRes = await getAnalytics();
           setAnalytics(aRes.data || null);
@@ -90,6 +119,14 @@ export default function AdminDashboard() {
     const id = setInterval(tick, 8000);
     return () => clearInterval(id);
   }, [loading, activeTab]);
+
+  const changeTab = (tabId) => {
+    activeTabRef.current = tabId;
+    setActiveTab(tabId);
+    if (tabId === 'products' || tabId === 'reviews' || tabId === 'orders') {
+      setNotifications(current => ({ ...current, [tabId]: 0 }));
+    }
+  };
 
   const handleLogout = async () => {
     try { await adminLogout(); } catch {}
@@ -127,7 +164,7 @@ export default function AdminDashboard() {
 
   const getCategoryName = (catId) => { const c = categories.find(x => x.id === catId); return c ? c.name : '—'; };
 
-  const tabCounts = { products: products.length, categories: categories.length, orders: orders.length, reviews: reviews.length, vouchers: vouchers.length, analytics: '', users: admins.length };
+  const tabCounts = { products: notifications.products, categories: '', orders: notifications.orders, reviews: notifications.reviews, vouchers: '', analytics: '', users: '' };
 
   if (loading) return <div className="min-h-screen bg-cream flex items-center justify-center"><div className="text-mocha">Loading dashboard...</div></div>;
 
@@ -141,9 +178,9 @@ export default function AdminDashboard() {
           </div>
           <nav className="flex-1 space-y-1.5">
             {TABS.map(tab => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${activeTab === tab.id ? 'bg-burnt-orange/10 text-burnt-orange' : 'text-mocha hover:bg-warm-sand hover:text-bark'}`} data-testid={`tab-${tab.id}`}>
+              <button key={tab.id} onClick={() => changeTab(tab.id)} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${activeTab === tab.id ? 'bg-burnt-orange/10 text-burnt-orange' : 'text-mocha hover:bg-warm-sand hover:text-bark'}`} data-testid={`tab-${tab.id}`}>
                 <tab.icon size={18} />{tab.label}
-                {tabCounts[tab.id] !== '' && <span className="ml-auto text-xs bg-warm-sand rounded-full px-2 py-0.5">{tabCounts[tab.id]}</span>}
+                {tabCounts[tab.id] > 0 && <span className="ml-auto text-xs bg-red-500 text-white rounded-full px-2 py-0.5" data-testid={`${tab.id}-notification`}>{tabCounts[tab.id]}</span>}
               </button>
             ))}
           </nav>

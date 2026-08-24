@@ -16,18 +16,37 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let disposed = false;
     const load = async () => {
       try {
         const [pRes, rRes] = await Promise.all([getProducts(), getReviews(true)]);
-        setProducts(pRes.data || []);
-        setReviews(rRes.data || []);
+        if (!disposed) {
+          setProducts(pRes.data || []);
+          setReviews(rRes.data || []);
+        }
       } catch (e) {
         console.error('Failed to load data:', e);
       } finally {
-        setLoading(false);
+        if (!disposed) setLoading(false);
       }
     };
     load();
+    const refresh = async () => {
+      try {
+        const [pRes, rRes] = await Promise.all([getProducts(), getReviews(true)]);
+        if (!disposed) {
+          setProducts(pRes.data || []);
+          setReviews(rRes.data || []);
+        }
+      } catch (e) {
+        console.error('Failed to refresh landing data:', e);
+      }
+    };
+    const intervalId = setInterval(refresh, 8000);
+    return () => {
+      disposed = true;
+      clearInterval(intervalId);
+    };
   }, []);
 
   return (
