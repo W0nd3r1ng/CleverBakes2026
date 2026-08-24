@@ -19,7 +19,6 @@ export default function OrderModal({ product, onClose }) {
     gcashProof: '',
     voucherCode: '',
     specialInstructions: '',
-    specialInstructions: '',
   });
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -136,7 +135,6 @@ export default function OrderModal({ product, onClose }) {
       if (discount > 0) msg += `\nSubtotal: PHP ${subtotal}\nDiscount: -PHP ${discount} (${voucherApplied?.code})`;
       msg += `\nTotal: PHP ${order.total}\n\nName: ${form.clientName}\nContact: ${form.contactNumber}\nAddress: ${form.address}\nDelivery: ${form.deliveryMethod}\nPayment: ${form.paymentMethod}`;
       if (form.specialInstructions.trim()) msg += `\nSpecial Instructions: ${form.specialInstructions.trim()}`;
-      if (form.specialInstructions.trim()) msg += `\nSpecial Instructions: ${form.specialInstructions.trim()}`;
 
       const messengerUrl = `https://m.me/61554594188313?text=${encodeURIComponent(msg)}`;
       window.open(messengerUrl, '_blank');
@@ -226,18 +224,6 @@ export default function OrderModal({ product, onClose }) {
             <label className="block text-sm font-medium text-bark mb-1">Address <span className="text-red-400">*</span></label>
             <textarea value={form.address} onChange={e => handleChange('address', e.target.value)} rows={2} placeholder="Complete address" className={`w-full px-4 py-2.5 rounded-xl border ${errors.address ? 'border-red-300 bg-red-50' : 'border-soft-border'} bg-white text-bark focus:outline-none focus:ring-2 focus:ring-burnt-orange/30 resize-none`} data-testid="address-input" />
             {errors.address && <p className="text-xs text-red-500 mt-1">{errors.address}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-bark mb-1">Special Instructions</label>
-            <textarea
-              value={form.specialInstructions}
-              onChange={e => handleChange('specialInstructions', e.target.value)}
-              rows={3}
-              placeholder="e.g. less sugar, add a message on the cake..."
-              className="w-full px-4 py-2.5 rounded-xl border border-soft-border bg-white text-bark focus:outline-none focus:ring-2 focus:ring-burnt-orange/30 resize-none"
-              data-testid="special-instructions-input"
-            />
           </div>
 
           <div>

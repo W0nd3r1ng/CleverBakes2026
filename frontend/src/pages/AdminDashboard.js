@@ -703,3 +703,47 @@ function ProductModal({ product, categories, onSave, onClose }) {
     </div>
   );
 }
+
+// ─── User Management ───
+function UsersTab({ admins, currentUser, onSave, onSetPassword, onDelete }) {
+  const [editing, setEditing] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ email: '', username: '', password: '' });
+
+  const openForm = (admin = null) => {
+    setEditing(admin);
+    setShowForm(true);
+    setForm({ email: admin?.email || '', username: admin?.username || '', password: '' });
+  };
+
+  const submit = (e) => {
+    e.preventDefault();
+    onSave(editing ? { email: form.email, username: form.username } : form, editing?.id);
+    setEditing(null);
+    setShowForm(false);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div><h2 className="font-heading text-2xl font-semibold text-bark">User Management</h2><p className="text-sm text-mocha mt-1">Manage administrator accounts and access.</p></div>
+        {currentUser?.is_super_admin && <button onClick={() => openForm()} className="inline-flex items-center gap-2 px-4 py-2.5 bg-burnt-orange text-white rounded-xl text-sm font-semibold"><Plus size={16} /> Add Admin</button>}
+      </div>
+      <div className="bg-white rounded-2xl border border-soft-border overflow-hidden">
+        <table className="w-full" data-testid="admins-table"><thead><tr className="border-b border-soft-border"><th className="text-left px-5 py-3 text-xs text-mocha uppercase">Email</th><th className="text-left px-5 py-3 text-xs text-mocha uppercase">Username</th><th className="text-left px-5 py-3 text-xs text-mocha uppercase">Role</th><th className="text-right px-5 py-3 text-xs text-mocha uppercase">Actions</th></tr></thead>
+          <tbody>{admins.map(admin => <tr key={admin.id} className="border-b border-soft-border/50">
+            <td className="px-5 py-3 text-sm text-bark">{admin.email}</td><td className="px-5 py-3 text-sm text-mocha">{admin.username}</td><td className="px-5 py-3 text-xs text-mocha">{admin.is_super_admin ? 'Main admin' : 'Admin'}{!admin.is_active && ' · Inactive'}</td>
+            <td className="px-5 py-3"><div className="flex justify-end gap-2"><button onClick={() => openForm(admin)} className="p-1.5 text-mocha hover:text-burnt-orange" aria-label={`Edit ${admin.email}`}><Edit2 size={15} /></button>{currentUser?.is_super_admin && !admin.is_super_admin && <><button onClick={async () => { const password = window.prompt('Enter a new strong password:'); if (password) await onSetPassword(admin.id, password); }} className="p-1.5 text-mocha hover:text-burnt-orange" aria-label={`Change password for ${admin.email}`}><KeyRound size={15} /></button><button onClick={() => onDelete(admin.id)} className="p-1.5 text-mocha hover:text-red-500" aria-label={`Delete ${admin.email}`}><Trash2 size={15} /></button></>}</div></td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+      {showForm ? <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => { setEditing(null); setShowForm(false); setForm({ email: '', username: '', password: '' }); }}><div className="bg-white rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between mb-5"><h3 className="font-heading text-xl font-semibold text-bark">{editing ? 'Edit Admin' : 'Add Admin'}</h3><button onClick={() => { setEditing(null); setShowForm(false); }}><X size={18} /></button></div><form onSubmit={submit} className="space-y-4"><input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} type="email" placeholder="Email" required className="w-full px-4 py-2.5 rounded-xl border border-soft-border" /><input value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} placeholder="Username (optional)" className="w-full px-4 py-2.5 rounded-xl border border-soft-border" />{!editing && <input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} type="password" placeholder="Strong password" required minLength={10} className="w-full px-4 py-2.5 rounded-xl border border-soft-border" />}<button type="submit" className="w-full py-3 bg-burnt-orange text-white rounded-xl font-semibold">{editing ? 'Save Changes' : 'Create Account'}</button></form></div></div> : null}
+    </div>
+  );
+}
+
+function PasswordModal({ onSave, onClose }) {
+  const [form, setForm] = useState({ current: '', next: '' });
+  const submit = async (e) => { e.preventDefault(); await onSave(form.current, form.next); };
+  return <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}><div className="bg-white rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between mb-5"><h3 className="font-heading text-xl font-semibold text-bark">Change Password</h3><button onClick={onClose}><X size={18} /></button></div><form onSubmit={submit} className="space-y-4"><input type="password" value={form.current} onChange={e => setForm({ ...form, current: e.target.value })} placeholder="Current password" required className="w-full px-4 py-2.5 rounded-xl border border-soft-border" /><input type="password" value={form.next} onChange={e => setForm({ ...form, next: e.target.value })} placeholder="New strong password" required minLength={10} className="w-full px-4 py-2.5 rounded-xl border border-soft-border" /><button type="submit" className="w-full py-3 bg-burnt-orange text-white rounded-xl font-semibold">Update Password</button></form></div></div>;
+}

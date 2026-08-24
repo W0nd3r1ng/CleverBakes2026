@@ -1,8 +1,8 @@
 # CleverBakes - Bakery Ordering Platform
 
 ## Admin Credentials
-- **Username:** `admin`
-- **Password:** `cleverbakes2025`
+- **Username:** `admin@cleverbakes.com` by default, or the configured `ADMIN_EMAIL`
+- **Password:** Set `ADMIN_INITIAL_PASSWORD` before first startup; it is stored hashed.
 - **Login URL:** `/admin/login`
 
 ## Tech Stack

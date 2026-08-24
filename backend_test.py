@@ -7,6 +7,7 @@ Tests all API endpoints for the Filipino bakery ordering platform
 import requests
 import sys
 import json
+import os
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -21,7 +22,10 @@ class CleverBakesAPITester:
         self.test_results = []
         
         # Test data
-        self.admin_credentials = {"username": "admin", "password": "cleverbakes2025"}
+        self.admin_credentials = {
+            "username": os.environ.get("ADMIN_EMAIL", "admin@cleverbakes.com"),
+            "password": os.environ.get("ADMIN_INITIAL_PASSWORD", ""),
+        }
         self.test_product = {
             "name": "Test Cupcake",
             "description": "A test cupcake for API testing",

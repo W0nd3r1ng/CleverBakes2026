@@ -78,6 +78,8 @@
    | `MONGO_URL` | `mongodb+srv://cleverbakes:YOUR_PASSWORD@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority` |
    | `DB_NAME` | `cleverbakes` |
    | `CORS_ORIGINS` | `https://cleverbakes-frontend.onrender.com` (you'll update this after creating frontend) |
+   | `ADMIN_EMAIL` | `admin@cleverbakes.com` |
+   | `ADMIN_INITIAL_PASSWORD` | A strong password for the first admin account |
 
 5. Click **"Create Web Service"**
 6. Wait for build (2-5 minutes)
@@ -131,7 +133,7 @@
 
 1. Visit your frontend URL: `https://cleverbakes-frontend.onrender.com`
 2. Check products load on the menu
-3. Go to `/admin/login` → login with `admin` / `cleverbakes2025`
+3. Go to `/admin/login` and sign in with the configured `ADMIN_EMAIL` and `ADMIN_INITIAL_PASSWORD`
 4. Try placing a test order
 5. Track the order at `/track`
 
@@ -174,8 +176,8 @@
 
 ## Admin Access
 - **URL**: `https://your-frontend-url.onrender.com/admin/login`
-- **Username**: `admin`
-- **Password**: `cleverbakes2025`
+- **Username**: The value configured in `ADMIN_EMAIL` (default: `admin@cleverbakes.com`)
+- **Password**: The value configured in `ADMIN_INITIAL_PASSWORD`; it is stored hashed in MongoDB.
 
 ## Seeded Voucher Codes (for testing)
 - `WELCOME10` — 10% off, minimum order ₱500

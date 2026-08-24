@@ -31,7 +31,7 @@ JWT_ALGORITHM = "HS256"
 IS_PRODUCTION = os.environ.get("RENDER") == "true" or os.environ.get("ENVIRONMENT") == "production"
 
 DEFAULT_ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@cleverbakes.com").strip().lower()
-DEFAULT_ADMIN_PASSWORD = os.environ.get("ADMIN_INITIAL_PASSWORD", "CleverBakes#Admin2026!")
+DEFAULT_ADMIN_PASSWORD = os.environ.get("ADMIN_INITIAL_PASSWORD", "").strip()
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -902,6 +902,9 @@ SEED_PRODUCTS = [
 async def seed_data():
     admin_count = await db.admins.count_documents({})
     if admin_count == 0:
+        if not DEFAULT_ADMIN_PASSWORD:
+            raise RuntimeError("ADMIN_INITIAL_PASSWORD must be set before creating the first admin account")
+        validate_password_strength(DEFAULT_ADMIN_PASSWORD)
         logger.info("Seeding default admin account...")
         await db.admins.insert_one({
             "id": str(uuid.uuid4()),
@@ -1002,22 +1005,6 @@ async def seed_data():
             }
             await db.vouchers.insert_one(voucher)
         logger.info("Seeded sample vouchers")
-
-    admin_count = await db.admins.count_documents({})
-    if admin_count == 0:
-        logger.info("Seeding default admin account...")
-        admin = {
-            "id": str(uuid.uuid4()),
-            "email": DEFAULT_ADMIN_EMAIL,
-            "username": "admin",
-            "password_hash": hash_password(DEFAULT_ADMIN_PASSWORD),
-            "is_active": True,
-            "is_super_admin": True,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
-        await db.admins.insert_one(admin)
-        logger.info(f"Seeded main admin {DEFAULT_ADMIN_EMAIL}")
 
     # Create indexes
     await db.categories.create_index("id", unique=True)
