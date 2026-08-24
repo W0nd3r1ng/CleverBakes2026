@@ -167,6 +167,7 @@ export default function AdminDashboard() {
   const getCategoryName = (catId) => { const c = categories.find(x => x.id === catId); return c ? c.name : '—'; };
 
   const tabCounts = { products: notifications.products, categories: '', orders: notifications.orders, reviews: notifications.reviews, vouchers: '', analytics: '', users: '' };
+  const visibleTabs = TABS.filter(tab => tab.id !== 'users' || currentUser?.is_super_admin);
 
   if (loading) return <div className="min-h-screen bg-cream flex items-center justify-center"><div className="text-mocha">Loading dashboard...</div></div>;
 
@@ -179,7 +180,7 @@ export default function AdminDashboard() {
             <div><p className="font-heading font-semibold text-bark text-sm">Clever Bake's</p><p className="text-xs text-mocha">Admin Console</p></div>
           </div>
           <nav className="flex-1 space-y-1.5">
-            {TABS.map(tab => (
+            {visibleTabs.map(tab => (
               <button key={tab.id} onClick={() => changeTab(tab.id)} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${activeTab === tab.id ? 'bg-burnt-orange/10 text-burnt-orange' : 'text-mocha hover:bg-warm-sand hover:text-bark'}`} data-testid={`tab-${tab.id}`}>
                 <tab.icon size={18} />{tab.label}
                 {tabCounts[tab.id] > 0 && <span className="ml-auto text-xs bg-red-500 text-white rounded-full px-2 py-0.5" data-testid={`${tab.id}-notification`}>{tabCounts[tab.id]}</span>}
@@ -631,7 +632,7 @@ function OrdersTab({ orders, onStatusChange, onBatchStatus, onPaymentChange, onD
                   {(o.flavor || o.size) && <p className="text-xs text-mocha">{[o.flavor, o.size].filter(Boolean).join(' · ')}</p>}
                   {o.special_instructions && <p className="text-xs text-burnt-orange mt-1 max-w-[220px]"><span className="font-semibold">Instructions:</span> {o.special_instructions}</p>}
                 </td>
-                <td className="px-4 py-3"><p className="text-sm text-bark">{o.customer_name}</p><p className="text-xs text-mocha">{o.contact_number}</p><p className="text-xs text-mocha max-w-[180px] truncate">{o.address}</p></td>
+                <td className="px-4 py-3"><p className="text-sm text-bark">{o.customer_name}</p><p className="text-xs text-mocha">{o.contact_number}</p><p className="text-xs text-mocha">{o.delivery_method || '—'}</p><p className="text-xs text-mocha max-w-[180px] truncate">{o.address}</p></td>
                 <td className="px-4 py-3">
                   <span className="text-sm font-semibold text-burnt-orange">&#8369;{o.total}</span>
                   {o.voucher_code && <span className="block text-[10px] text-green-600 font-medium">{o.voucher_code} (-₱{o.discount})</span>}
@@ -747,6 +748,9 @@ function ProductModal({ product, categories, onSave, onClose }) {
 function UsersTab({ admins, currentUser, onSave, onSetPassword, onDelete }) {
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [passwordAdmin, setPasswordAdmin] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [form, setForm] = useState({ email: '', username: '', password: '' });
 
   const openForm = (admin = null) => {
@@ -762,6 +766,18 @@ function UsersTab({ admins, currentUser, onSave, onSetPassword, onDelete }) {
     setShowForm(false);
   };
 
+  const submitPassword = async (e) => {
+    e.preventDefault();
+    setPasswordError('');
+    try {
+      await onSetPassword(passwordAdmin.id, newPassword);
+      setPasswordAdmin(null);
+      setNewPassword('');
+    } catch (error) {
+      setPasswordError(error.response?.data?.detail || 'Unable to update password');
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -772,11 +788,12 @@ function UsersTab({ admins, currentUser, onSave, onSetPassword, onDelete }) {
         <table className="w-full" data-testid="admins-table"><thead><tr className="border-b border-soft-border"><th className="text-left px-5 py-3 text-xs text-mocha uppercase">Email</th><th className="text-left px-5 py-3 text-xs text-mocha uppercase">Username</th><th className="text-left px-5 py-3 text-xs text-mocha uppercase">Role</th><th className="text-right px-5 py-3 text-xs text-mocha uppercase">Actions</th></tr></thead>
           <tbody>{admins.map(admin => <tr key={admin.id} className="border-b border-soft-border/50">
             <td className="px-5 py-3 text-sm text-bark">{admin.email}</td><td className="px-5 py-3 text-sm text-mocha">{admin.username}</td><td className="px-5 py-3 text-xs text-mocha">{admin.is_super_admin ? 'Main admin' : 'Admin'}{!admin.is_active && ' · Inactive'}</td>
-            <td className="px-5 py-3"><div className="flex justify-end gap-2"><button onClick={() => openForm(admin)} className="p-1.5 text-mocha hover:text-burnt-orange" aria-label={`Edit ${admin.email}`}><Edit2 size={15} /></button>{currentUser?.is_super_admin && !admin.is_super_admin && <><button onClick={async () => { const password = window.prompt('Enter a new strong password:'); if (password) await onSetPassword(admin.id, password); }} className="p-1.5 text-mocha hover:text-burnt-orange" aria-label={`Change password for ${admin.email}`}><KeyRound size={15} /></button><button onClick={() => onDelete(admin.id)} className="p-1.5 text-mocha hover:text-red-500" aria-label={`Delete ${admin.email}`}><Trash2 size={15} /></button></>}</div></td>
+            <td className="px-5 py-3"><div className="flex justify-end gap-2"><button onClick={() => openForm(admin)} className="p-1.5 text-mocha hover:text-burnt-orange" aria-label={`Edit ${admin.email}`}><Edit2 size={15} /></button>{currentUser?.is_super_admin && !admin.is_super_admin && <><button onClick={() => { setPasswordAdmin(admin); setNewPassword(''); setPasswordError(''); }} className="p-1.5 text-mocha hover:text-burnt-orange" aria-label={`Change password for ${admin.email}`}><KeyRound size={15} /></button><button onClick={() => onDelete(admin.id)} className="p-1.5 text-mocha hover:text-red-500" aria-label={`Delete ${admin.email}`}><Trash2 size={15} /></button></>}</div></td>
           </tr>)}</tbody>
         </table>
       </div>
       {showForm ? <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => { setEditing(null); setShowForm(false); setForm({ email: '', username: '', password: '' }); }}><div className="bg-white rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between mb-5"><h3 className="font-heading text-xl font-semibold text-bark">{editing ? 'Edit Admin' : 'Add Admin'}</h3><button onClick={() => { setEditing(null); setShowForm(false); }}><X size={18} /></button></div><form onSubmit={submit} className="space-y-4"><input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} type="email" placeholder="Email" required className="w-full px-4 py-2.5 rounded-xl border border-soft-border" /><input value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} placeholder="Username (optional)" className="w-full px-4 py-2.5 rounded-xl border border-soft-border" />{!editing && <input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} type="password" placeholder="Strong password" required minLength={10} className="w-full px-4 py-2.5 rounded-xl border border-soft-border" />}<button type="submit" className="w-full py-3 bg-burnt-orange text-white rounded-xl font-semibold">{editing ? 'Save Changes' : 'Create Account'}</button></form></div></div> : null}
+      {passwordAdmin && <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setPasswordAdmin(null)}><div className="bg-white rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between mb-5"><div><h3 className="font-heading text-xl font-semibold text-bark">Change Admin Password</h3><p className="text-sm text-mocha mt-1">{passwordAdmin.email}</p></div><button onClick={() => setPasswordAdmin(null)}><X size={18} /></button></div><form onSubmit={submitPassword} className="space-y-4"><input value={newPassword} onChange={e => setNewPassword(e.target.value)} type="password" placeholder="New strong password" required minLength={10} autoComplete="new-password" className="w-full px-4 py-2.5 rounded-xl border border-soft-border" />{passwordError && <p className="text-sm text-red-600">{passwordError}</p>}<button type="submit" className="w-full py-3 bg-burnt-orange text-white rounded-xl font-semibold">Update Password</button></form></div></div>}
     </div>
   );
 }
