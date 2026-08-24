@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, ArrowLeft, Package, Clock, ChefHat, CheckCircle2, Truck } from 'lucide-react';
 import { trackOrder } from '../api';
 import { Link } from 'react-router-dom';
@@ -6,12 +6,15 @@ import { Link } from 'react-router-dom';
 const STATUSES = ['Pending', 'Confirmed', 'Preparing', 'Ready', 'Completed'];
 
 function StatusTimeline({ currentStatus }) {
-  const currentIdx = STATUSES.indexOf(currentStatus);
-  const icons = [Clock, CheckCircle2, ChefHat, Package, Truck];
+  const terminal = ['Cancelled', 'Refunded'].includes(currentStatus);
+  const statuses = terminal ? [...STATUSES, currentStatus] : STATUSES;
+  const currentIdx = statuses.indexOf(currentStatus);
+  const icons = [Clock, CheckCircle2, ChefHat, Package, Truck, currentStatus === 'Refunded' ? CheckCircle2 : Truck];
+  const terminalColor = currentStatus === 'Refunded' ? 'bg-red-200 text-red-800' : 'bg-red-100 text-red-700';
 
   return (
     <div className="flex flex-col gap-0" data-testid="order-status-timeline">
-      {STATUSES.map((s, i) => {
+      {statuses.map((s, i) => {
         const Icon = icons[i];
         const done = i <= currentIdx;
         const active = i === currentIdx;
@@ -19,7 +22,7 @@ function StatusTimeline({ currentStatus }) {
           <div key={s} className="flex items-start gap-4">
             <div className="flex flex-col items-center">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
-                active ? 'bg-burnt-orange text-white ring-4 ring-burnt-orange/20' : done ? 'bg-green-600 text-white' : 'bg-warm-sand text-mocha'
+                active ? (terminal ? `${terminalColor} ring-4 ring-red-200` : 'bg-burnt-orange text-white ring-4 ring-burnt-orange/20') : done ? 'bg-green-600 text-white' : 'bg-warm-sand text-mocha'
               }`}>
                 <Icon size={18} />
               </div>
@@ -43,6 +46,25 @@ export default function TrackOrder() {
   const [order, setOrder] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [trackedNumber, setTrackedNumber] = useState('');
+
+  useEffect(() => {
+    if (!trackedNumber) return undefined;
+    let disposed = false;
+    const refresh = async () => {
+      try {
+        const res = await trackOrder(trackedNumber);
+        if (!disposed) setOrder(res.data);
+      } catch {
+        // Keep the last known order visible during a temporary request failure.
+      }
+    };
+    const intervalId = setInterval(refresh, 8000);
+    return () => {
+      disposed = true;
+      clearInterval(intervalId);
+    };
+  }, [trackedNumber]);
 
   const handleTrack = async (e) => {
     e.preventDefault();
@@ -53,6 +75,7 @@ export default function TrackOrder() {
     try {
       const res = await trackOrder(orderNumber.trim());
       setOrder(res.data);
+      setTrackedNumber(orderNumber.trim());
     } catch {
       setError('Order not found. Please check your order number.');
     } finally {
@@ -109,7 +132,9 @@ export default function TrackOrder() {
                 <p className="text-2xl font-heading font-semibold text-bark">#{order.order_number}</p>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                order.payment_status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                order.payment_status === 'Paid' ? 'bg-green-100 text-green-700' :
+                ['Rejected', 'Refunded'].includes(order.payment_status) ? 'bg-red-100 text-red-700' :
+                'bg-yellow-100 text-yellow-700'
               }`} data-testid="payment-status-badge">
                 {order.payment_method} - {order.payment_status}
               </span>

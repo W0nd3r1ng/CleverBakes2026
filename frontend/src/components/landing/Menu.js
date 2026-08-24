@@ -8,8 +8,26 @@ export default function Menu({ products, loading, onOrder }) {
   const [activeCategory, setActiveCategory] = useState('all');
 
   useEffect(() => {
-    getCategories().then(res => setCategories(res.data || [])).catch(() => {});
+    let disposed = false;
+    const loadCategories = () => getCategories()
+      .then(res => {
+        if (!disposed) setCategories(res.data || []);
+      })
+      .catch(() => {});
+
+    loadCategories();
+    const intervalId = setInterval(loadCategories, 8000);
+    return () => {
+      disposed = true;
+      clearInterval(intervalId);
+    };
   }, []);
+
+  useEffect(() => {
+    if (activeCategory !== 'all' && activeCategory !== 'bestsellers' && !categories.some(cat => cat.id === activeCategory)) {
+      setActiveCategory('all');
+    }
+  }, [activeCategory, categories]);
 
   const bestsellers = useMemo(() => products.filter(p => p.is_bestseller), [products]);
 

@@ -90,8 +90,9 @@ export default function AdminDashboard() {
     if (loading) return;
     const tick = async () => {
       try {
-        const [pRes, rRes, oRes] = await Promise.all([getProducts(), getReviews(false), getAllOrders()]);
+        const [pRes, cRes, rRes, oRes] = await Promise.all([getProducts(), getCategories(), getReviews(false), getAllOrders()]);
         const nextProducts = pRes.data || [];
+        const nextCategories = cRes.data || [];
         const nextReviews = rRes.data || [];
         const nextOrders = oRes.data || [];
         const newProducts = nextProducts.filter(item => !knownIds.current.products.has(item.id)).length;
@@ -103,6 +104,7 @@ export default function AdminDashboard() {
           orders: new Set(nextOrders.map(item => item.id)),
         };
         setProducts(nextProducts);
+        setCategories(nextCategories);
         setReviews(nextReviews);
         setOrders(nextOrders);
         setNotifications(current => ({
