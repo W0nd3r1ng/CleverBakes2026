@@ -46,7 +46,7 @@ export default function AdminLogin() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="admin@cleverbakes.com"
+              placeholder="Username"
               required
               autoComplete="username"
               className="w-full px-4 py-3 rounded-xl border border-soft-border bg-cream/50 text-bark placeholder:text-mocha/40 focus:outline-none focus:ring-2 focus:ring-burnt-orange/30 focus:border-burnt-orange transition-all"
